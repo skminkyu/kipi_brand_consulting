@@ -71,6 +71,44 @@ cd client && npm run build
 cd ../server && npm start   # http://localhost:4000 하나로 API + 화면 모두 제공
 ```
 
+## Railway 배포 방법
+
+저장소 루트에 Railway(Nixpacks)가 자동으로 인식하는 `package.json`(build/start 스크립트)과
+`railway.json`(헬스체크 등 배포 설정)을 포함해 두었습니다. 아래 순서대로 진행하면 됩니다.
+
+1. **GitHub 저장소 준비**: 이 저장소를 Railway 계정과 연결할 GitHub 계정에 push해 둡니다(이미 이
+   저장소를 사용 중이라면 그대로 사용하면 됩니다).
+2. **Railway 프로젝트 생성**: https://railway.app 로그인 → `New Project` → `Deploy from GitHub repo`
+   → 이 저장소 선택 → 배포할 브랜치 선택.
+3. **빌드/실행 확인**: Root Directory는 비워두고(저장소 루트 그대로) 사용하면 됩니다. Railway가
+   루트의 `package.json`을 감지해 자동으로
+   - Build: `npm install --prefix server && npm install --prefix client && npm run build --prefix client`
+   - Start: `npm start` (→ `server`의 Express 앱이 빌드된 클라이언트까지 함께 서빙)
+   를 실행합니다. 별도 설정 없이 배포가 가능하지만, 화면에 표시된 값과 실제 Settings 값이 다르면
+   `railway.json`의 내용을 그대로 Settings의 Build/Start Command에 붙여넣어 주세요.
+4. **환경변수 설정** (Project → Service → Variables):
+   | 변수명 | 설명 |
+   |---|---|
+   | `KIPRIS_API_KEY` | KIPRIS Plus에서 발급받은 인증키 (필수) |
+   | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS` | 답변 등록 메일 발송용 SMTP 계정 |
+   | `SMTP_FROM_NAME`, `SMTP_FROM_EMAIL` | 발신자 표시 이름/주소 |
+   | `PUBLIC_WEB_URL` | 5단계에서 발급받는 Railway 공개 도메인(예: `https://xxxx.up.railway.app`). 메일 본문 링크에 사용되므로 도메인 확정 후 채워주세요 |
+   | `DATA_DIR` | SQLite DB 저장 경로. 6단계에서 만들 Volume의 마운트 경로로 지정 (예: `/data`) |
+   | `UPLOAD_DIR` | 첨부파일 저장 경로. 위와 동일한 Volume 하위 경로로 지정 (예: `/data/uploads`) |
+
+   `PORT`, `CORS_ORIGIN`은 설정하지 않아도 됩니다 — Railway가 `PORT`를 자동 주입하고, 프론트엔드를
+   서버가 같은 오리진으로 서빙하므로 CORS 설정이 별도로 필요 없습니다.
+5. **퍼블릭 도메인 발급**: 배포 완료 후 Service → Settings → Networking → `Generate Domain` 클릭.
+   발급된 주소를 위 `PUBLIC_WEB_URL`에 입력하고 저장하면 자동으로 재배포됩니다.
+6. **데이터 영속성을 위한 Volume 추가** (권장): Railway는 기본적으로 재배포 시 파일시스템이
+   초기화되어 SQLite DB와 첨부파일이 사라집니다. Service → Settings → Volumes → `New Volume`으로
+   볼륨을 추가하고 Mount Path를 `/data`로 지정한 뒤, 위 4단계의 `DATA_DIR=/data`,
+   `UPLOAD_DIR=/data/uploads`를 설정해 주세요.
+7. **동작 확인**: `https://<발급받은 도메인>/api/health` 접속 시 `{"ok":true,"hasKiprisKey":true}`가
+   보이면 정상입니다. 이후 도메인 루트로 접속해 검색/문의 화면이 뜨는지 확인합니다.
+
+이후 GitHub 저장소의 해당 브랜치에 push할 때마다 Railway가 자동으로 재빌드/재배포합니다.
+
 ## KIPRIS API 연동 관련 참고사항
 
 - KIPRIS Plus OpenAPI(`https://plus.kipris.or.kr/kipo-api/kipi/...`) 서비스명/필드명은 KIPRIS 포털

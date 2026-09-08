@@ -2,7 +2,9 @@ const path = require("path");
 const fs = require("fs");
 const { DatabaseSync } = require("node:sqlite");
 
-const DATA_DIR = path.join(__dirname, "..", "data");
+// Railway 등에 배포 시 Volume을 마운트한 경로를 DATA_DIR로 지정하면
+// 재배포/재시작 이후에도 문의 데이터가 보존된다.
+const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(__dirname, "..", "data"));
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
 const db = new DatabaseSync(path.join(DATA_DIR, "kipi.db"));

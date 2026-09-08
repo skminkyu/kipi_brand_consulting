@@ -164,7 +164,15 @@ router.patch("/:id/response", complianceBasicAuth, async (req, res) => {
     mailResult = await sendInquiryAnsweredMail(updated);
   } catch (err) {
     console.error("[inquiry] 답변 등록 메일 발송 실패:", err);
-    mailResult = { sent: false, reason: "SEND_FAILED", error: err.message };
+    // 원인 진단에 필요한 필드(code/address/port 등)를 최대한 함께 노출한다.
+    mailResult = {
+      sent: false,
+      reason: "SEND_FAILED",
+      error: err.message,
+      errorCode: err.code,
+      errorAddress: err.address,
+      errorPort: err.port,
+    };
   }
 
   res.json({

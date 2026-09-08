@@ -207,6 +207,20 @@ function ComplianceInquiryDetail({ id }) {
               <>
                 {" "}
                 원인: <code>{mailNotice.error}</code>
+                {(mailNotice.errorCode || mailNotice.errorAddress || mailNotice.errorPort) && (
+                  <>
+                    {" "}
+                    (<code>
+                      {[
+                        mailNotice.errorCode,
+                        mailNotice.errorAddress && `address=${mailNotice.errorAddress}`,
+                        mailNotice.errorPort && `port=${mailNotice.errorPort}`,
+                      ]
+                        .filter(Boolean)
+                        .join(", ")}
+                    </code>)
+                  </>
+                )}
               </>
             ) : (
               <> 서버의 SMTP 설정을 확인해 주세요.</>

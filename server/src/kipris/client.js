@@ -1,6 +1,14 @@
 const { XMLParser } = require("fast-xml-parser");
 
-const BASE_URL = (process.env.KIPRIS_BASE_URL || "https://plus.kipris.or.kr/kipo-api/kipi").replace(/\/$/, "");
+// KIPRIS Plus는 서비스마다 서로 다른 게이트웨이/경로를 쓴다.
+//  - KIPO_BASE_URL (/kipo-api/kipi/...): 서지상세조회, 상표 항목별검색 등 (ServiceKey)
+//  - REST_BASE_URL (/openapi/rest/...): 특허·실용신안 출원번호 검색 등 구버전 게이트웨이 (accessKey)
+// 정확한 파라미터명이 서비스마다 달라 accessKey/ServiceKey를 항상 함께 보낸다.
+const KIPO_BASE_URL = (process.env.KIPRIS_BASE_URL || "https://plus.kipris.or.kr/kipo-api/kipi").replace(/\/$/, "");
+const REST_BASE_URL = (process.env.KIPRIS_REST_BASE_URL || "https://plus.kipris.or.kr/openapi/rest").replace(
+  /\/$/,
+  ""
+);
 const ACCESS_KEY = process.env.KIPRIS_API_KEY || "";
 
 const parser = new XMLParser({
@@ -17,20 +25,21 @@ const parser = new XMLParser({
  * 정확한 서비스 경로/필드명은 https://plus.kipris.or.kr 포털의 서비스별 명세서를 따른다.
  * (서비스명 오탈자 "patUtiModInfoSearchSevice" 는 KIPRIS 측 실제 API 경로 그대로임)
  */
-async function callKipris(servicePath, params = {}) {
+async function callKipris(servicePath, params = {}, { base = "kipo" } = {}) {
   if (!ACCESS_KEY) {
     throw new KiprisError("KIPRIS_API_KEY 가 설정되지 않았습니다. server/.env 파일을 확인하세요.", "NO_API_KEY");
   }
 
-  // KIPRIS Plus 포털 자체 게이트웨이는 accessKey, 공공데이터포털(data.go.kr) 경유 게이트웨이는
-  // ServiceKey 파라미터명을 사용한다. 발급받은 키가 어느 쪽 규격인지 문서만으로 단정하기 어려워
-  // 두 파라미터명을 함께 보내 호환성을 높인다 (인식하지 못하는 파라미터는 대부분 무시된다).
+  const baseUrl = base === "rest" ? REST_BASE_URL : KIPO_BASE_URL;
+
+  // 서비스별로 accessKey/ServiceKey 중 무엇을 쓰는지 달라 두 파라미터명을 함께 보낸다
+  // (인식하지 못하는 파라미터는 대부분 무시된다).
   const query = new URLSearchParams({
     ...params,
     accessKey: ACCESS_KEY,
     ServiceKey: ACCESS_KEY,
   });
-  const url = `${BASE_URL}/${servicePath}?${query.toString()}`;
+  const url = `${baseUrl}/${servicePath}?${query.toString()}`;
 
   let res;
   try {
@@ -78,9 +87,11 @@ async function callKipris(servicePath, params = {}) {
 // 자주 나오는 코드에 한글 설명을 덧붙인다. 매핑에 없는 메시지는 원문 그대로 노출한다.
 const FRIENDLY_MESSAGE_SUFFIX = {
   INVALID_REQUEST_PARAMETER_ERROR:
-    " (입력하신 번호의 형식이 선택한 구분과 맞지 않을 수 있습니다 — 특허/실용신안/상표 구분을 다시 확인해 주세요.)",
+    " (요청 파라미터가 잘못되었습니다 — 번호 형식/구분을 다시 확인해 주세요. 계속되면 개발팀에 문의해 주세요.)",
   NO_MANDATORY_REQUEST_PARAMETERS_ERROR: " (필수 입력값이 누락되었습니다. 번호를 입력했는지 확인해 주세요.)",
   SERVICE_KEY_IS_NOT_REGISTERED_ERROR: " (KIPRIS 인증키가 등록되지 않았거나 잘못되었습니다.)",
+  ACCESS_KEY_NOT_REGISTERED: " (KIPRIS 인증키가 등록되지 않았거나 잘못되었습니다.)",
+  DEADLINE_EXPIRED: " (KIPRIS 인증키의 해당 서비스 이용기간이 만료되었습니다. KIPRIS Plus 포털에서 재신청이 필요합니다.)",
   APPLICATION_ERROR: " (해당 번호로 등록된 정보를 찾을 수 없습니다.)",
 };
 

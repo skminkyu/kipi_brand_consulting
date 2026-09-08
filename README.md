@@ -120,24 +120,31 @@ cd ../server && npm start   # http://localhost:4000 하나로 API + 화면 모�
 
 ## KIPRIS API 연동 관련 참고사항
 
-- KIPRIS Plus OpenAPI(`https://plus.kipris.or.kr/kipo-api/kipi/...`) 서비스명/필드명은 KIPRIS 포털
-  (https://plus.kipris.or.kr) 서비스별 명세서를 기준으로 구현했습니다.
-- 이 개발 환경은 보안 정책상 `plus.kipris.or.kr`로의 외부 네트워크 호출이 차단되어 있어, 실제 운영
-  환경에서 발급받은 키로 최초 연동 시 KIPRIS 응답 필드명이 명세와 다르게 내려오는 항목이 있다면
-  `server/src/kipris/patentService.js`, `server/src/kipris/trademarkService.js`의 `normalizeItem()`
-  함수에서 후보 필드명(`pick(obj, [...후보키...])`)만 추가/조정하면 됩니다.
-- 상세 조회 화면 하단의 "원본 응답 데이터" 접이식 패널에서 KIPRIS가 실제로 내려준 전체 필드를 그대로
-  확인할 수 있어, 필드 매핑을 조정할 때 참고할 수 있습니다.
-- 오류 메시지에는 KIPRIS가 내려준 `resultCode`가 `[코드] 메시지` 형태로 함께 표시됩니다. 계속
-  `INVALID_REQUEST_PARAMETER_ERROR` 등이 뜬다면, 아래 두 가지를 먼저 확인해 주세요.
-  1. **서비스별 활용신청 여부** — KIPRIS Plus는 키 발급과 별개로 포털(https://plus.kipris.or.kr)
-     마이페이지에서 사용하려는 서비스(예: 특허·실용신안 서지상세, 상표 서지상세)를 개별적으로
-     "활용신청/승인" 해야 하는 경우가 많습니다. 신청은 했지만 승인 전이거나 신청을 안 한 서비스는
-     키가 유효해도 위와 같은 파라미터 오류로 거절될 수 있습니다.
-  2. **인증키 파라미터명** — 게이트웨이에 따라 `accessKey` 또는 `ServiceKey`를 요구합니다. 현재
-     코드는 두 파라미터를 함께 전송하도록 되어 있지만(`server/src/kipris/client.js`), 그래도 실패한다면
-     서버 로그(Railway → Deployments → 로그)에서 `[kipris] API 오류 응답` 라인의 원본 응답을 확인해
-     정확한 원인을 파악할 수 있습니다.
+KIPRIS Plus는 서비스(오퍼레이션)마다 게이트웨이 경로와 필수 파라미터가 다르고, 심지어 인증키
+파라미터명(`accessKey` vs `ServiceKey`)도 오퍼레이션마다 다릅니다. 실제 동작이 확인된 공개 구현체
+(KIPRIS Plus용 오픈소스 클라이언트/MCP 서버)를 참고해 아래와 같이 맞춰 구현했습니다.
+
+| 오퍼레이션 | 게이트웨이 | 인증키 | 비고 |
+|---|---|---|---|
+| 특허·실용신안 출원번호검색 (`applicationNumberSearchInfo`) | `/openapi/rest/` | `accessKey` | `patent`/`utility`/`docsStart`/`docsCount` 등 필수 |
+| 특허·실용신안 서지상세 (`getBibliographyDetailInfoSearch`) | `/kipo-api/kipi/` | `ServiceKey` | `applicationNumber`만 필요 |
+| 상표 출원번호검색 (`applicationNumberSearchInfo`) | `/kipo-api/kipi/` | `ServiceKey` | 상태(출원/등록/거절 등)·유형(문자상표/도형상표 등) 플래그 약 30개가 전부 필수값 — 코드에서 전체 포함(`true`)으로 채워서 호출 |
+| 상표 서지상세 (`getBibliographyDetailInfoSearch`) | `/kipo-api/kipi/` | `ServiceKey` | `applicationNumber`만 필요 |
+
+두 인증키 파라미터명은 어느 쪽이 맞는지 오퍼레이션마다 달라, `server/src/kipris/client.js`가 매 요청에
+`accessKey`와 `ServiceKey`를 함께 실어 보냅니다(인식 못 하는 이름은 대부분 무시됨).
+
+- 이 개발 환경은 보안 정책상 `plus.kipris.or.kr`로의 외부 네트워크 호출이 차단되어 있어, 위 매핑은
+  실제 라이브 키로 직접 검증하지 못했습니다(사용된 필드명/필수 파라미터는 KIPRIS Plus 공식 명세와
+  공개된 검증 구현체 기준). 실제 배포 환경에서 여전히 필드가 비어 보이거나 오류가 난다면, 상세 조회
+  화면 하단의 "원본 응답 데이터" 접이식 패널에서 KIPRIS가 실제로 내려준 전체 필드를 확인하고,
+  `server/src/kipris/patentService.js` / `trademarkService.js`의 `normalize*Item()` 함수에서
+  필드명만 조정하면 됩니다.
+- 오류 메시지에는 KIPRIS가 내려준 `resultCode`가 `[코드] 메시지` 형태로 함께 표시됩니다
+  (`10`=파라미터 오류, `20`=결과없음, `30`=키 미등록, `31`=서비스 이용기간 만료 등).
+- **상표 검색 API는 실제로 활용신청/승인이 안 된 키에서 유독 오류가 잦다는 사례가 많습니다.**
+  파라미터를 다 맞춰도 계속 실패한다면, KIPRIS Plus 포털(https://plus.kipris.or.kr) 마이페이지에서
+  "상표정보검색서비스"가 정상적으로 활용신청·승인되어 있는지 먼저 확인해 주세요.
 
 ## 보안/운영 참고사항
 

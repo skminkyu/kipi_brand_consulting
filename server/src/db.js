@@ -37,6 +37,17 @@ db.exec(`
     size_bytes INTEGER,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+
+  -- 문의자가 브라우저 알림(Web Push)을 허용하면 저장되는 구독 정보.
+  -- 이메일이 회사 보안정책 등으로 막히는 경우를 대비한 대체/보조 알림 채널.
+  CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    inquiry_id INTEGER NOT NULL REFERENCES inquiries(id) ON DELETE CASCADE,
+    endpoint TEXT NOT NULL UNIQUE,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `);
 
 module.exports = db;

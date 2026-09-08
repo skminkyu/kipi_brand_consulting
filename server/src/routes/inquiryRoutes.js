@@ -4,6 +4,7 @@ const fs = require("fs");
 const db = require("../db");
 const { upload } = require("../upload");
 const { sendInquiryAnsweredMail } = require("../mailer");
+const webPush = require("../webPush");
 const patentService = require("../kipris/patentService");
 const trademarkService = require("../kipris/trademarkService");
 const { complianceBasicAuth } = require("../complianceAuth");
@@ -133,6 +134,23 @@ router.get("/:id/attachments/:attachmentId", (req, res) => {
 });
 
 /**
+ * POST /api/inquiries/:id/push-subscription
+ * 문의자가 브라우저 알림(Web Push)을 허용하면, 답변 등록 시 알림을 받을 수 있도록
+ * 구독 정보를 저장한다. 이메일이 회사 보안정책 등으로 도달하지 않는 경우의 보조 채널.
+ */
+router.post("/:id/push-subscription", (req, res) => {
+  const row = db.prepare("SELECT id FROM inquiries WHERE id = ?").get(req.params.id);
+  if (!row) return res.status(404).json({ error: "문의 내역을 찾을 수 없습니다." });
+
+  try {
+    webPush.saveSubscription(row.id, req.body?.subscription);
+    res.status(201).json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+/**
  * PATCH /api/inquiries/:id/response
  * 컴플라이언스 담당자가 답변 코멘트와 문의자 이메일을 확인/기재 후 저장.
  * 저장과 동시에 문의자에게 답변 등록 안내 메일을 자동 발송한다.
@@ -175,10 +193,18 @@ router.patch("/:id/response", complianceBasicAuth, async (req, res) => {
     };
   }
 
+  let pushResult = { attempted: 0, sent: 0 };
+  try {
+    pushResult = await webPush.sendPushForInquiry(updated);
+  } catch (err) {
+    console.error("[inquiry] 답변 등록 브라우저 알림 발송 실패:", err);
+  }
+
   res.json({
     ...inquiryRowToJson(updated),
     attachments: getAttachmentsForInquiry(updated.id),
     mail: mailResult,
+    push: pushResult,
   });
 });
 

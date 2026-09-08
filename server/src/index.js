@@ -14,6 +14,7 @@ const cors = require("cors");
 const kiprisRoutes = require("./routes/kiprisRoutes");
 const inquiryRoutes = require("./routes/inquiryRoutes");
 const { complianceBasicAuth } = require("./complianceAuth");
+const webPush = require("./webPush");
 
 const app = express();
 
@@ -39,7 +40,13 @@ app.get("/api/health", (req, res) => {
     hasResendConfig: Boolean(process.env.RESEND_API_KEY),
     hasSendGridConfig: Boolean(process.env.SENDGRID_API_KEY),
     mailProvider: process.env.SENDGRID_API_KEY ? "sendgrid" : process.env.RESEND_API_KEY ? "resend" : "smtp",
+    hasWebPushConfig: webPush.isEnabled(),
   });
+});
+
+// 문의자가 브라우저 알림을 구독할 때 클라이언트가 사용할 공개키.
+app.get("/api/push/vapid-public-key", (req, res) => {
+  res.json({ publicKey: webPush.getPublicKey() });
 });
 
 app.use("/api/kipris", kiprisRoutes);

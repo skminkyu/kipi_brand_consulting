@@ -51,4 +51,14 @@ export const inquiryApi = {
       body: JSON.stringify(payload),
     }),
   attachmentUrl: (inquiryId, attachmentId) => `${API_BASE}/inquiries/${inquiryId}/attachments/${attachmentId}`,
+  subscribePush: (id, subscription) =>
+    request(`/inquiries/${id}/push-subscription`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subscription }),
+    }),
+};
+
+export const pushApi = {
+  getVapidPublicKey: () => request("/push/vapid-public-key"),
 };

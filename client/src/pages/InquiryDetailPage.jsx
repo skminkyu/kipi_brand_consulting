@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { IP_TYPE_LABEL, inquiryApi } from "../api.js";
+import { isPushSupported, subscribeToPush } from "../push.js";
 
 export default function InquiryDetailPage() {
   const { id } = useParams();
   const location = useLocation();
   const [inquiry, setInquiry] = useState(null);
   const [error, setError] = useState("");
+  const [pushState, setPushState] = useState("idle"); // idle | subscribing | subscribed | error
+  const [pushError, setPushError] = useState("");
 
   useEffect(() => {
     inquiryApi
@@ -14,6 +17,18 @@ export default function InquiryDetailPage() {
       .then(setInquiry)
       .catch((err) => setError(err.message));
   }, [id]);
+
+  async function handleSubscribe() {
+    setPushState("subscribing");
+    setPushError("");
+    try {
+      await subscribeToPush(id);
+      setPushState("subscribed");
+    } catch (err) {
+      setPushState("error");
+      setPushError(err.message);
+    }
+  }
 
   if (error) return <div className="alert alert-error">{error}</div>;
   if (!inquiry) return <p className="text-muted">불러오는 중...</p>;
@@ -25,6 +40,35 @@ export default function InquiryDetailPage() {
       {location.state?.justCreated && (
         <div className="alert alert-success">
           문의가 정상적으로 등록되었습니다. 답변이 등록되면 입력하신 이메일로 안내드립니다.
+        </div>
+      )}
+
+      {inquiry.status === "OPEN" && isPushSupported() && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="section-title" style={{ marginTop: 0 }}>
+            브라우저 알림으로도 받기 (선택)
+          </div>
+          <p className="page-desc" style={{ marginBottom: 12 }}>
+            회사 메일 보안 정책 등으로 이메일이 도착하지 않을 수 있습니다. 이 버튼을 눌러 알림을
+            허용해두시면, 답변이 등록될 때 이 브라우저로도 알려드립니다 (이 기기·브라우저를 계속
+            사용해야 하며, 이메일 발송과 별개로 추가 안내됩니다).
+          </p>
+          {pushState === "subscribed" ? (
+            <div className="alert alert-success" style={{ margin: 0 }}>
+              알림이 설정되었습니다. 이 브라우저에서 답변 등록 알림을 받을 수 있습니다.
+            </div>
+          ) : (
+            <>
+              <button type="button" className="btn" onClick={handleSubscribe} disabled={pushState === "subscribing"}>
+                {pushState === "subscribing" ? "설정 중..." : "브라우저 알림 받기"}
+              </button>
+              {pushState === "error" && (
+                <div className="alert alert-error" style={{ marginTop: 10 }}>
+                  {pushError}
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
 

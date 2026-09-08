@@ -116,7 +116,7 @@ function ComplianceInquiryDetail({ id }) {
         responseComment: responseComment.trim(),
       });
       setInquiry(updated);
-      setMailNotice(updated.mail?.sent ? "success" : "no-smtp");
+      setMailNotice(updated.mail || { sent: false });
     } catch (err) {
       setSaveError(err.message);
     } finally {
@@ -195,12 +195,22 @@ function ComplianceInquiryDetail({ id }) {
         </div>
 
         {saveError && <div className="alert alert-error">{saveError}</div>}
-        {mailNotice === "success" && (
+        {mailNotice?.sent && (
           <div className="alert alert-success">답변이 저장되었고, 문의자에게 안내 메일이 발송되었습니다.</div>
         )}
-        {mailNotice === "no-smtp" && (
+        {mailNotice && !mailNotice.sent && (
           <div className="alert alert-error">
-            답변은 저장되었지만 메일 발송에 실패했습니다. 서버의 SMTP 설정을 확인해 주세요.
+            답변은 저장되었지만 메일 발송에 실패했습니다.
+            {mailNotice.reason === "SMTP_NOT_CONFIGURED" ? (
+              <> 서버에 SMTP 계정 정보(SMTP_HOST/USER/PASS)가 설정되어 있지 않습니다.</>
+            ) : mailNotice.error ? (
+              <>
+                {" "}
+                원인: <code>{mailNotice.error}</code>
+              </>
+            ) : (
+              <> 서버의 SMTP 설정을 확인해 주세요.</>
+            )}
           </div>
         )}
 

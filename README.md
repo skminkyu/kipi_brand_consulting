@@ -128,6 +128,16 @@ cd ../server && npm start   # http://localhost:4000 하나로 API + 화면 모�
   함수에서 후보 필드명(`pick(obj, [...후보키...])`)만 추가/조정하면 됩니다.
 - 상세 조회 화면 하단의 "원본 응답 데이터" 접이식 패널에서 KIPRIS가 실제로 내려준 전체 필드를 그대로
   확인할 수 있어, 필드 매핑을 조정할 때 참고할 수 있습니다.
+- 오류 메시지에는 KIPRIS가 내려준 `resultCode`가 `[코드] 메시지` 형태로 함께 표시됩니다. 계속
+  `INVALID_REQUEST_PARAMETER_ERROR` 등이 뜬다면, 아래 두 가지를 먼저 확인해 주세요.
+  1. **서비스별 활용신청 여부** — KIPRIS Plus는 키 발급과 별개로 포털(https://plus.kipris.or.kr)
+     마이페이지에서 사용하려는 서비스(예: 특허·실용신안 서지상세, 상표 서지상세)를 개별적으로
+     "활용신청/승인" 해야 하는 경우가 많습니다. 신청은 했지만 승인 전이거나 신청을 안 한 서비스는
+     키가 유효해도 위와 같은 파라미터 오류로 거절될 수 있습니다.
+  2. **인증키 파라미터명** — 게이트웨이에 따라 `accessKey` 또는 `ServiceKey`를 요구합니다. 현재
+     코드는 두 파라미터를 함께 전송하도록 되어 있지만(`server/src/kipris/client.js`), 그래도 실패한다면
+     서버 로그(Railway → Deployments → 로그)에서 `[kipris] API 오류 응답` 라인의 원본 응답을 확인해
+     정확한 원인을 파악할 수 있습니다.
 
 ## 보안/운영 참고사항
 
@@ -137,3 +147,8 @@ cd ../server && npm start   # http://localhost:4000 하나로 API + 화면 모�
 - 컴플라이언스 답변 등록 화면(`/compliance`)과 답변 저장 API는 `COMPLIANCE_USERNAME`/
   `COMPLIANCE_PASSWORD` 공유 계정(HTTP Basic Auth)으로 보호됩니다. 더 강한 보안이 필요하다면
   담당자별 개별 로그인/사내 SSO 연동으로 교체하는 것을 권장합니다.
+  - ⚠️ **`server/.env` 파일은 배포 시 함께 올라가지 않습니다.** Railway 등에 배포한다면 반드시
+    해당 서비스의 Variables(환경변수) 화면에 `COMPLIANCE_USERNAME`/`COMPLIANCE_PASSWORD`를 직접
+    등록해야 합니다. `/compliance` 접속 시 로그인 팝업이 뜨지 않는다면 이 값이 비어있다는 뜻입니다.
+  - `https://<도메인>/api/health` 응답의 `hasCompliancePassword`, `hasSmtpConfig` 값으로 배포
+    환경에 필요한 환경변수가 실제로 설정되었는지 바로 확인할 수 있습니다.

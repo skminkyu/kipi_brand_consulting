@@ -164,6 +164,7 @@ router.patch("/:id/response", complianceBasicAuth, async (req, res) => {
     mailResult = await sendInquiryAnsweredMail(updated);
   } catch (err) {
     console.error("[inquiry] 답변 등록 메일 발송 실패:", err);
+    mailResult = { sent: false, reason: "SEND_FAILED", error: err.message };
   }
 
   res.json({

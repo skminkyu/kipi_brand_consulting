@@ -22,7 +22,14 @@ async function callKipris(servicePath, params = {}) {
     throw new KiprisError("KIPRIS_API_KEY 가 설정되지 않았습니다. server/.env 파일을 확인하세요.", "NO_API_KEY");
   }
 
-  const query = new URLSearchParams({ ...params, accessKey: ACCESS_KEY });
+  // KIPRIS Plus 포털 자체 게이트웨이는 accessKey, 공공데이터포털(data.go.kr) 경유 게이트웨이는
+  // ServiceKey 파라미터명을 사용한다. 발급받은 키가 어느 쪽 규격인지 문서만으로 단정하기 어려워
+  // 두 파라미터명을 함께 보내 호환성을 높인다 (인식하지 못하는 파라미터는 대부분 무시된다).
+  const query = new URLSearchParams({
+    ...params,
+    accessKey: ACCESS_KEY,
+    ServiceKey: ACCESS_KEY,
+  });
   const url = `${BASE_URL}/${servicePath}?${query.toString()}`;
 
   let res;
@@ -35,19 +42,22 @@ async function callKipris(servicePath, params = {}) {
   const text = await res.text();
 
   if (!res.ok) {
-    throw new KiprisError(`KIPRIS API 가 오류를 반환했습니다 (HTTP ${res.status}).`, "HTTP_ERROR", text);
+    throw new KiprisError(`KIPRIS API 가 오류를 반환했습니다 (HTTP ${res.status}).`, "HTTP_ERROR", text.slice(0, 500));
   }
 
   let parsed;
   try {
     parsed = parser.parse(text);
   } catch (err) {
-    throw new KiprisError("KIPRIS 응답(XML)을 해석할 수 없습니다.", "PARSE_ERROR", text);
+    throw new KiprisError("KIPRIS 응답(XML)을 해석할 수 없습니다.", "PARSE_ERROR", text.slice(0, 500));
   }
 
   const response = parsed.response;
   if (!response) {
-    throw new KiprisError("KIPRIS 응답 형식이 예상과 다릅니다.", "UNEXPECTED_FORMAT", text);
+    // response>header 형식이 아니면(OpenAPI_ServiceResponse 등 공공데이터포털 공통 오류 포맷일 수 있음)
+    // 원본 XML을 그대로 노출해 원인 파악이 가능하도록 한다.
+    console.error(`[kipris] 예상과 다른 응답 형식 (servicePath=${servicePath}):`, text.slice(0, 1000));
+    throw new KiprisError("KIPRIS 응답 형식이 예상과 다릅니다.", "UNEXPECTED_FORMAT", text.slice(0, 500));
   }
 
   const header = response.header || {};
@@ -55,8 +65,10 @@ async function callKipris(servicePath, params = {}) {
   const resultCode = String(header.resultCode ?? "");
 
   if (successYN === "N" || (resultCode && resultCode !== "00")) {
+    console.error(`[kipris] API 오류 응답 (servicePath=${servicePath}, resultCode=${resultCode}):`, header);
     const rawMsg = header.resultMsg || "KIPRIS API 조회에 실패했습니다.";
-    throw new KiprisError(friendlyKiprisMessage(rawMsg), "API_ERROR", header);
+    const messageWithCode = resultCode ? `[${resultCode}] ${rawMsg}` : rawMsg;
+    throw new KiprisError(friendlyKiprisMessage(messageWithCode, rawMsg), "API_ERROR", header);
   }
 
   return response.body || {};
@@ -72,9 +84,9 @@ const FRIENDLY_MESSAGE_SUFFIX = {
   APPLICATION_ERROR: " (해당 번호로 등록된 정보를 찾을 수 없습니다.)",
 };
 
-function friendlyKiprisMessage(rawMsg) {
+function friendlyKiprisMessage(displayMsg, rawMsg) {
   const suffix = FRIENDLY_MESSAGE_SUFFIX[String(rawMsg).trim()];
-  return suffix ? `${rawMsg}${suffix}` : rawMsg;
+  return suffix ? `${displayMsg}${suffix}` : displayMsg;
 }
 
 /** items.item 이 1개면 객체로, 여러 개면 배열로 파싱되는 fast-xml-parser 특성을 배열로 통일 */

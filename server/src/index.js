@@ -25,7 +25,12 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.get("/api/health", (req, res) => {
-  res.json({ ok: true, hasKiprisKey: Boolean(process.env.KIPRIS_API_KEY) });
+  res.json({
+    ok: true,
+    hasKiprisKey: Boolean(process.env.KIPRIS_API_KEY),
+    hasCompliancePassword: Boolean(process.env.COMPLIANCE_PASSWORD),
+    hasSmtpConfig: Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS),
+  });
 });
 
 app.use("/api/kipris", kiprisRoutes);

@@ -7,7 +7,9 @@ const router = express.Router();
 
 function handleKiprisError(res, err) {
   if (err instanceof KiprisError) {
-    return res.status(502).json({ error: err.message, code: err.code });
+    // detail에는 KIPRIS가 실제로 내려준 <header> 전체(또는 원본 응답 일부)가 들어있어,
+    // 화면/개발자도구 Network 탭에서 바로 정확한 원인을 확인할 수 있게 그대로 노출한다.
+    return res.status(502).json({ error: err.message, code: err.code, detail: err.detail });
   }
   console.error(err);
   return res.status(500).json({ error: "서버 오류가 발생했습니다." });

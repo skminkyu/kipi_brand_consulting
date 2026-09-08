@@ -21,6 +21,7 @@ export default function InquiryFormPage() {
 
   const [preview, setPreview] = useState(null);
   const [previewError, setPreviewError] = useState("");
+  const [previewErrorDetail, setPreviewErrorDetail] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
@@ -33,6 +34,7 @@ export default function InquiryFormPage() {
     }
     setPreviewLoading(true);
     setPreviewError("");
+    setPreviewErrorDetail(null);
     setPreview(null);
     try {
       const data =
@@ -42,6 +44,7 @@ export default function InquiryFormPage() {
       setPreview(data);
     } catch (err) {
       setPreviewError(err.message);
+      setPreviewErrorDetail(err.detail || null);
     } finally {
       setPreviewLoading(false);
     }
@@ -131,7 +134,17 @@ export default function InquiryFormPage() {
           </div>
         )}
 
-        {previewError && <div className="alert alert-error">{previewError}</div>}
+        {previewError && (
+          <div className="alert alert-error">
+            {previewError}
+            {previewErrorDetail && (
+              <details style={{ marginTop: 8 }}>
+                <summary>KIPRIS 원본 오류 상세 (개발팀 문의 시 함께 전달해 주세요)</summary>
+                <pre className="raw-json">{JSON.stringify(previewErrorDetail, null, 2)}</pre>
+              </details>
+            )}
+          </div>
+        )}
         {preview && (
           <div className="card" style={{ background: "#fafbfc", marginBottom: 14 }}>
             <p className="meta-line">

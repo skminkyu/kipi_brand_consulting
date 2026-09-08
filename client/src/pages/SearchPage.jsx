@@ -10,6 +10,7 @@ export default function SearchPage() {
   const [number, setNumber] = useState("");
   const [results, setResults] = useState(null);
   const [error, setError] = useState("");
+  const [errorDetail, setErrorDetail] = useState(null);
   const [loading, setLoading] = useState(false);
   const [openApplicationNumber, setOpenApplicationNumber] = useState(null);
 
@@ -25,6 +26,7 @@ export default function SearchPage() {
     }
     setLoading(true);
     setError("");
+    setErrorDetail(null);
     setResults(null);
     setOpenApplicationNumber(null);
     try {
@@ -32,6 +34,7 @@ export default function SearchPage() {
       setResults(data.results);
     } catch (err) {
       setError(err.message);
+      setErrorDetail(err.detail || null);
     } finally {
       setLoading(false);
     }
@@ -93,7 +96,17 @@ export default function SearchPage() {
         </button>
       </form>
 
-      {error && <div className="alert alert-error" style={{ marginTop: 16 }}>{error}</div>}
+      {error && (
+        <div className="alert alert-error" style={{ marginTop: 16 }}>
+          {error}
+          {errorDetail && (
+            <details style={{ marginTop: 8 }}>
+              <summary>KIPRIS 원본 오류 상세 (개발팀 문의 시 함께 전달해 주세요)</summary>
+              <pre className="raw-json">{JSON.stringify(errorDetail, null, 2)}</pre>
+            </details>
+          )}
+        </div>
+      )}
 
       {results && (
         <div style={{ marginTop: 20 }}>

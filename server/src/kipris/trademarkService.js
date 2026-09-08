@@ -3,9 +3,11 @@ const { pick } = require("./fieldPick");
 
 const SERVICE = "trademarkInfoSearchService";
 
-// applicationNumberSearchInfo는 아래 상태/유형 플래그가 전부 필수값이다(KIPRIS 명세).
-// 전체를 검색 대상에 포함하기 위해 모두 true로 채운다.
-const REQUIRED_STATUS_AND_TYPE_FLAGS = {
+// applicationNumberSearchInfo 명세상 "필수값"으로 명시된 것은 상태 플래그(8개)와
+// 상표 형태 플래그(13개)뿐이다. 상표 종류 플래그(trademark/serviceMark 등 9개)는 각 유형의
+// 내부 코드(-40, -41 등)만 안내되어 있고 필수 표시가 없어, 불필요한 파라미터로 오히려
+// 거절당할 가능성을 줄이기 위해 보내지 않는다(필요 시 REQUIRED_FLAGS에 다시 추가).
+const REQUIRED_FLAGS = {
   application: "true",
   registration: "true",
   refused: "true",
@@ -14,15 +16,6 @@ const REQUIRED_STATUS_AND_TYPE_FLAGS = {
   publication: "true",
   cancel: "true",
   abandonment: "true",
-  trademark: "true",
-  serviceMark: "true",
-  trademarkServiceMark: "true",
-  businessEmblem: "true",
-  collectiveMark: "true",
-  geoOrgMark: "true",
-  internationalMark: "true",
-  certMark: "true",
-  geoCertMark: "true",
   character: "true",
   figure: "true",
   compositionCharacter: "true",
@@ -125,7 +118,7 @@ async function callNumberSearchOperation({ operation, field }, number, docsStart
       docsCount,
       descSort: "false",
       sortSpec: "AD",
-      ...REQUIRED_STATUS_AND_TYPE_FLAGS,
+      ...REQUIRED_FLAGS,
     });
     return { results: toArray(body.items?.TradeMarkInfo).map(normalizeSearchItem) };
   } catch (err) {

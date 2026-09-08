@@ -7,7 +7,9 @@ async function request(path, options = {}) {
 
   if (!res.ok) {
     const message = body?.error || `요청이 실패했습니다. (HTTP ${res.status})`;
-    throw new Error(message);
+    const err = new Error(message);
+    err.detail = body?.detail;
+    throw err;
   }
   return body;
 }

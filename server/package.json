@@ -1,0 +1,23 @@
+{
+  "name": "kipi-brand-consulting-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "KIPRIS 특허/상표/실용신안 검색 및 컴플라이언스 문의 시스템 - API 서버",
+  "type": "commonjs",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^5.2.1",
+    "fast-xml-parser": "^5.11.1",
+    "multer": "^2.3.0",
+    "nodemailer": "^10.0.1"
+  }
+}

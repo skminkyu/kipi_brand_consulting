@@ -1,0 +1,17 @@
+node_modules/
+.env
+*.log
+npm-debug.log*
+
+# 서버 런타임 데이터 (DB, 업로드 파일)
+server/data/*.db
+server/data/*.db-*
+server/uploads/*
+!server/uploads/.gitkeep
+!server/data/.gitkeep
+
+# 프론트엔드 빌드 산출물
+client/dist/
+client/.vite/
+
+.DS_Store

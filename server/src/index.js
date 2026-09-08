@@ -1,5 +1,11 @@
 require("dotenv").config();
 
+const dns = require("dns");
+// Railway 등 일부 컨테이너 플랫폼은 아웃바운드 IPv6 경로가 없는데, Node의 기본 DNS 해석
+// 순서(verbatim)는 IPv6(AAAA) 주소를 먼저 시도해 "connect ENETUNREACH ...(IPv6 주소)"로
+// 실패하는 경우가 있다(SMTP 등 외부 연결에서 자주 발생). IPv4를 우선하도록 강제한다.
+dns.setDefaultResultOrder("ipv4first");
+
 const path = require("path");
 const fs = require("fs");
 const express = require("express");

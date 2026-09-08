@@ -19,6 +19,9 @@ function getTransporter() {
     connectionTimeout: 8000,
     greetingTimeout: 8000,
     socketTimeout: 8000,
+    // 일부 컨테이너 환경은 아웃바운드 IPv6 경로가 없어 IPv6(AAAA) 주소로 연결 시도 시
+    // ENETUNREACH가 발생한다. IPv4를 강제해 이 문제를 피한다.
+    family: 4,
   });
   return transporter;
 }

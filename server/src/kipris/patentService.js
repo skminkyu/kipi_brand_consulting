@@ -85,15 +85,48 @@ function normalizeSearchItem(item) {
   };
 }
 
-/** 출원번호/등록번호/공개번호 등으로 특허·실용신안을 검색한다. */
+// "번호" 한 칸에 출원/등록/공개/공고번호 중 무엇을 넣어도 찾을 수 있도록,
+// 사용자가 입력한 값을 4개 항목별검색 오퍼레이션에 각각 넣어 병렬로 조회한 뒤 합친다.
+const NUMBER_SEARCH_OPERATIONS = [
+  { operation: "applicationNumberSearchInfo", field: "applicationNumber" },
+  { operation: "registrationNumberSearchInfo", field: "registerNumber" },
+  { operation: "openNumberSearchInfo", field: "openNumber" },
+  { operation: "publicationNumberSearchInfo", field: "publicationNumber" },
+];
+
+async function callNumberSearchOperation({ operation, field }, number, docsStart, docsCount) {
+  try {
+    const body = await callKipris(
+      `${SERVICE}/${operation}`,
+      { [field]: number, docsStart, docsCount, ...COMMON_SEARCH_PARAMS },
+      { base: "rest", keyParam: "accessKey" }
+    );
+    return { results: toArray(body.items?.PatentUtilityInfo).map(normalizeSearchItem) };
+  } catch (err) {
+    console.warn(`[patentService] ${operation} 조회 실패 (number=${number}):`, err.message);
+    return { error: err };
+  }
+}
+
+/** 출원번호/등록번호/공개번호/공고번호 중 어느 것이든 입력하면 특허·실용신안을 검색한다. */
 async function searchByNumber(number, { docsStart = 1, docsCount = 10 } = {}) {
-  const body = await callKipris(
-    `${SERVICE}/applicationNumberSearchInfo`,
-    { applicationNumber: number, docsStart, docsCount, ...COMMON_SEARCH_PARAMS },
-    { base: "rest" }
+  const outcomes = await Promise.all(
+    NUMBER_SEARCH_OPERATIONS.map((op) => callNumberSearchOperation(op, number, docsStart, docsCount))
   );
-  const items = toArray(body.items?.PatentUtilityInfo);
-  return items.map(normalizeSearchItem);
+
+  // 4개 오퍼레이션이 전부 오류(결과 없음이 아니라 진짜 오류)라면 조용히 빈 배열을 주는 대신
+  // 원인을 그대로 알려준다. 하나라도 성공했다면 그 결과를 사용한다.
+  if (outcomes.every((o) => o.error)) {
+    throw outcomes[0].error;
+  }
+
+  const merged = outcomes.flatMap((o) => o.results || []);
+  const seen = new Set();
+  return merged.filter((item) => {
+    if (!item.applicationNumber || seen.has(item.applicationNumber)) return false;
+    seen.add(item.applicationNumber);
+    return true;
+  });
 }
 
 /** 자유검색(발명의 명칭, 키워드 등)으로 특허·실용신안을 검색한다. */
@@ -101,7 +134,7 @@ async function searchByKeyword(word, { docsStart = 1, docsCount = 10 } = {}) {
   const body = await callKipris(
     `${SERVICE}/freeSearchInfo`,
     { word, docsStart, docsCount, ...COMMON_SEARCH_PARAMS },
-    { base: "rest" }
+    { base: "rest", keyParam: "accessKey" }
   );
   const items = toArray(body.items?.PatentUtilityInfo);
   return items.map(normalizeSearchItem);

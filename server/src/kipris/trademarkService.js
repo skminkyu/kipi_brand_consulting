@@ -109,18 +109,48 @@ function normalizeDetailItem(item) {
   };
 }
 
-/** 출원번호/등록번호 등으로 상표를 검색한다. */
+// "번호" 한 칸에 출원/등록/공고번호 중 무엇을 넣어도 찾을 수 있도록,
+// 사용자가 입력한 값을 3개 항목별검색 오퍼레이션에 각각 넣어 병렬로 조회한 뒤 합친다.
+const NUMBER_SEARCH_OPERATIONS = [
+  { operation: "applicationNumberSearchInfo", field: "applicationNumber" },
+  { operation: "registerNumberSearchInfo", field: "registerNumber" },
+  { operation: "publicationNumberSearchInfo", field: "publicationNumber" },
+];
+
+async function callNumberSearchOperation({ operation, field }, number, docsStart, docsCount) {
+  try {
+    const body = await callKipris(`${SERVICE}/${operation}`, {
+      [field]: number,
+      docsStart,
+      docsCount,
+      descSort: "false",
+      sortSpec: "AD",
+      ...REQUIRED_STATUS_AND_TYPE_FLAGS,
+    });
+    return { results: toArray(body.items?.TradeMarkInfo).map(normalizeSearchItem) };
+  } catch (err) {
+    console.warn(`[trademarkService] ${operation} 조회 실패 (number=${number}):`, err.message);
+    return { error: err };
+  }
+}
+
+/** 출원번호/등록번호/공고번호 중 어느 것이든 입력하면 상표를 검색한다. */
 async function searchByNumber(number, { docsStart = 1, docsCount = 10 } = {}) {
-  const body = await callKipris(`${SERVICE}/applicationNumberSearchInfo`, {
-    applicationNumber: number,
-    docsStart,
-    docsCount,
-    descSort: "false",
-    sortSpec: "AD",
-    ...REQUIRED_STATUS_AND_TYPE_FLAGS,
+  const outcomes = await Promise.all(
+    NUMBER_SEARCH_OPERATIONS.map((op) => callNumberSearchOperation(op, number, docsStart, docsCount))
+  );
+
+  if (outcomes.every((o) => o.error)) {
+    throw outcomes[0].error;
+  }
+
+  const merged = outcomes.flatMap((o) => o.results || []);
+  const seen = new Set();
+  return merged.filter((item) => {
+    if (!item.applicationNumber || seen.has(item.applicationNumber)) return false;
+    seen.add(item.applicationNumber);
+    return true;
   });
-  const items = toArray(body.items?.TradeMarkInfo);
-  return items.map(normalizeSearchItem);
 }
 
 /** 상표 명칭(단어)으로 검색한다. (KIPRIS상 폐기예정 오퍼레이션 - 대체 API 미확인) */

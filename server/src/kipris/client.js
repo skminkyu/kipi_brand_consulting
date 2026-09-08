@@ -25,20 +25,16 @@ const parser = new XMLParser({
  * 정확한 서비스 경로/필드명은 https://plus.kipris.or.kr 포털의 서비스별 명세서를 따른다.
  * (서비스명 오탈자 "patUtiModInfoSearchSevice" 는 KIPRIS 측 실제 API 경로 그대로임)
  */
-async function callKipris(servicePath, params = {}, { base = "kipo" } = {}) {
+async function callKipris(servicePath, params = {}, { base = "kipo", keyParam = "ServiceKey" } = {}) {
   if (!ACCESS_KEY) {
     throw new KiprisError("KIPRIS_API_KEY 가 설정되지 않았습니다. server/.env 파일을 확인하세요.", "NO_API_KEY");
   }
 
   const baseUrl = base === "rest" ? REST_BASE_URL : KIPO_BASE_URL;
 
-  // 서비스별로 accessKey/ServiceKey 중 무엇을 쓰는지 달라 두 파라미터명을 함께 보낸다
-  // (인식하지 못하는 파라미터는 대부분 무시된다).
-  const query = new URLSearchParams({
-    ...params,
-    accessKey: ACCESS_KEY,
-    ServiceKey: ACCESS_KEY,
-  });
+  // 오퍼레이션마다 accessKey 또는 ServiceKey 중 문서에 명시된 정확한 파라미터명 하나만 보낸다
+  // (불필요한 파라미터를 함께 보내면 엄격한 게이트웨이에서 오히려 파라미터 오류로 거절될 수 있다).
+  const query = new URLSearchParams({ ...params, [keyParam]: ACCESS_KEY });
   const url = `${baseUrl}/${servicePath}?${query.toString()}`;
 
   let res;
@@ -73,8 +69,19 @@ async function callKipris(servicePath, params = {}, { base = "kipo" } = {}) {
   const successYN = String(header.successYN || "").toUpperCase();
   const resultCode = String(header.resultCode ?? "");
 
+  // resultCode "20"은 "요청은 정상 처리됐지만 매칭되는 결과가 없음"을 의미하는 KIPRIS 관례코드로,
+  // 실패가 아니다. 이걸 오류로 던지면 검색 결과 0건이 전부 에러 화면으로 뜨는 문제가 생긴다.
+  if (resultCode === "20") {
+    return response.body || {};
+  }
+
   if (successYN === "N" || (resultCode && resultCode !== "00")) {
-    console.error(`[kipris] API 오류 응답 (servicePath=${servicePath}, resultCode=${resultCode}):`, header);
+    console.error(
+      `[kipris] API 오류 응답 (servicePath=${servicePath}, resultCode=${resultCode}):`,
+      header,
+      "\n요청 URL(키 마스킹):",
+      url.replace(ACCESS_KEY, "***")
+    );
     const rawMsg = header.resultMsg || "KIPRIS API 조회에 실패했습니다.";
     const messageWithCode = resultCode ? `[${resultCode}] ${rawMsg}` : rawMsg;
     throw new KiprisError(friendlyKiprisMessage(messageWithCode, rawMsg), "API_ERROR", header);

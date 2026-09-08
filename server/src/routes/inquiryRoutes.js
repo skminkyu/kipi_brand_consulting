@@ -6,6 +6,7 @@ const { upload } = require("../upload");
 const { sendInquiryAnsweredMail } = require("../mailer");
 const patentService = require("../kipris/patentService");
 const trademarkService = require("../kipris/trademarkService");
+const { complianceBasicAuth } = require("../complianceAuth");
 
 const router = express.Router();
 
@@ -137,7 +138,7 @@ router.get("/:id/attachments/:attachmentId", (req, res) => {
  * 저장과 동시에 문의자에게 답변 등록 안내 메일을 자동 발송한다.
  * 필드: responderName(선택), respondedEmail, responseComment
  */
-router.patch("/:id/response", async (req, res) => {
+router.patch("/:id/response", complianceBasicAuth, async (req, res) => {
   const { responderName, respondedEmail, responseComment } = req.body;
 
   const row = db.prepare("SELECT * FROM inquiries WHERE id = ?").get(req.params.id);

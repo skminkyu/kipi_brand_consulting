@@ -7,6 +7,7 @@ const cors = require("cors");
 
 const kiprisRoutes = require("./routes/kiprisRoutes");
 const inquiryRoutes = require("./routes/inquiryRoutes");
+const { complianceBasicAuth } = require("./complianceAuth");
 
 const app = express();
 
@@ -34,6 +35,10 @@ app.use("/api/inquiries", inquiryRoutes);
 // (별도 프론트엔드 호스팅/리버스 프록시 없이 한 프로세스로 운영 가능)
 const CLIENT_DIST = path.join(__dirname, "..", "..", "client", "dist");
 if (fs.existsSync(CLIENT_DIST)) {
+  // 컴플라이언스 담당자 화면은 공유 비밀번호(HTTP Basic Auth)로 접근을 제한한다.
+  app.get(["/compliance", "/compliance/*splat"], complianceBasicAuth, (req, res) => {
+    res.sendFile(path.join(CLIENT_DIST, "index.html"));
+  });
   app.use(express.static(CLIENT_DIST));
   app.get("/*splat", (req, res) => {
     res.sendFile(path.join(CLIENT_DIST, "index.html"));

@@ -55,14 +55,26 @@ async function callKipris(servicePath, params = {}) {
   const resultCode = String(header.resultCode ?? "");
 
   if (successYN === "N" || (resultCode && resultCode !== "00")) {
-    throw new KiprisError(
-      header.resultMsg || "KIPRIS API 조회에 실패했습니다.",
-      "API_ERROR",
-      header
-    );
+    const rawMsg = header.resultMsg || "KIPRIS API 조회에 실패했습니다.";
+    throw new KiprisError(friendlyKiprisMessage(rawMsg), "API_ERROR", header);
   }
 
   return response.body || {};
+}
+
+// KIPRIS가 영문 코드성 메시지를 그대로 내려주는 경우가 많아, 담당자가 바로 이해할 수 있도록
+// 자주 나오는 코드에 한글 설명을 덧붙인다. 매핑에 없는 메시지는 원문 그대로 노출한다.
+const FRIENDLY_MESSAGE_SUFFIX = {
+  INVALID_REQUEST_PARAMETER_ERROR:
+    " (입력하신 번호의 형식이 선택한 구분과 맞지 않을 수 있습니다 — 특허/실용신안/상표 구분을 다시 확인해 주세요.)",
+  NO_MANDATORY_REQUEST_PARAMETERS_ERROR: " (필수 입력값이 누락되었습니다. 번호를 입력했는지 확인해 주세요.)",
+  SERVICE_KEY_IS_NOT_REGISTERED_ERROR: " (KIPRIS 인증키가 등록되지 않았거나 잘못되었습니다.)",
+  APPLICATION_ERROR: " (해당 번호로 등록된 정보를 찾을 수 없습니다.)",
+};
+
+function friendlyKiprisMessage(rawMsg) {
+  const suffix = FRIENDLY_MESSAGE_SUFFIX[String(rawMsg).trim()];
+  return suffix ? `${rawMsg}${suffix}` : rawMsg;
 }
 
 /** items.item 이 1개면 객체로, 여러 개면 배열로 파싱되는 fast-xml-parser 특성을 배열로 통일 */

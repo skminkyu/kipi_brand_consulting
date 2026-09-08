@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { inquiryApi, kiprisApi } from "../api.js";
+import { IP_TYPE_LABEL, inquiryApi, kiprisApi } from "../api.js";
+import { detectIpTypeFromNumber, detectUnsupportedTypeLabel } from "../ipNumber.js";
 
 export default function InquiryFormPage() {
   const [searchParams] = useSearchParams();
@@ -8,6 +9,10 @@ export default function InquiryFormPage() {
 
   const [ipType, setIpType] = useState(searchParams.get("ipType") || "PATENT");
   const [ipNumber, setIpNumber] = useState(searchParams.get("ipNumber") || "");
+
+  const detectedType = useMemo(() => detectIpTypeFromNumber(ipNumber), [ipNumber]);
+  const unsupportedLabel = useMemo(() => detectUnsupportedTypeLabel(ipNumber), [ipNumber]);
+  const typeMismatch = detectedType && detectedType !== ipType;
   const [requesterName, setRequesterName] = useState("");
   const [requesterEmail, setRequesterEmail] = useState("");
   const [subject, setSubject] = useState("");
@@ -107,6 +112,24 @@ export default function InquiryFormPage() {
             </div>
           </div>
         </div>
+
+        {typeMismatch && (
+          <div className="alert alert-error" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <span>
+              입력하신 번호는 앞자리로 볼 때 <strong>{IP_TYPE_LABEL[detectedType]}</strong> 출원번호 형식으로
+              보입니다. 구분이 다르면 조회에 실패할 수 있어요.
+            </span>
+            <button type="button" className="btn" onClick={() => setIpType(detectedType)}>
+              구분을 {IP_TYPE_LABEL[detectedType]}(으)로 변경
+            </button>
+          </div>
+        )}
+        {!typeMismatch && unsupportedLabel && (
+          <div className="alert alert-error">
+            입력하신 번호는 {unsupportedLabel} 출원번호 형식으로 보입니다. 이 시스템은 특허·실용신안·상표만
+            지원합니다.
+          </div>
+        )}
 
         {previewError && <div className="alert alert-error">{previewError}</div>}
         {preview && (

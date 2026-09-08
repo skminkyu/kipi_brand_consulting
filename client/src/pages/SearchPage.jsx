@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { IP_TYPE_LABEL, kiprisApi } from "../api.js";
+import { detectIpTypeFromNumber, detectUnsupportedTypeLabel } from "../ipNumber.js";
 import PatentDetailPanel from "../components/PatentDetailPanel.jsx";
 import TrademarkDetailPanel from "../components/TrademarkDetailPanel.jsx";
 
@@ -11,6 +12,10 @@ export default function SearchPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [openApplicationNumber, setOpenApplicationNumber] = useState(null);
+
+  const detectedType = useMemo(() => detectIpTypeFromNumber(number), [number]);
+  const unsupportedLabel = useMemo(() => detectUnsupportedTypeLabel(number), [number]);
+  const typeMismatch = detectedType && detectedType !== type;
 
   async function handleSearch(e) {
     e.preventDefault();
@@ -64,6 +69,25 @@ export default function SearchPage() {
             />
           </div>
         </div>
+
+        {typeMismatch && (
+          <div className="alert alert-error" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <span>
+              입력하신 번호는 앞자리로 볼 때 <strong>{IP_TYPE_LABEL[detectedType]}</strong> 출원번호 형식으로
+              보입니다. 구분이 다르면 조회에 실패할 수 있어요.
+            </span>
+            <button type="button" className="btn" onClick={() => setType(detectedType)}>
+              구분을 {IP_TYPE_LABEL[detectedType]}(으)로 변경
+            </button>
+          </div>
+        )}
+        {!typeMismatch && unsupportedLabel && (
+          <div className="alert alert-error">
+            입력하신 번호는 {unsupportedLabel} 출원번호 형식으로 보입니다. 이 시스템은 특허·실용신안·상표만
+            지원합니다.
+          </div>
+        )}
+
         <button type="submit" className="btn btn-primary" disabled={loading}>
           {loading ? "검색 중..." : "검색"}
         </button>

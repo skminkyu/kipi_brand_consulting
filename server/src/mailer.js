@@ -26,24 +26,12 @@ function getTransporter() {
   return transporter;
 }
 
-/** 컴플라이언스 담당자가 답변을 등록하면 문의자에게 안내 메일을 발송한다. */
-async function sendInquiryAnsweredMail(inquiry) {
-  const t = getTransporter();
-  if (!t) {
-    console.warn(`[mailer] SMTP 미설정으로 메일 발송을 건너뜁니다. (문의 #${inquiry.id} -> ${inquiry.responded_email})`);
-    return { sent: false, reason: "SMTP_NOT_CONFIGURED" };
-  }
-
+function buildMailContent(inquiry) {
   const webUrl = process.env.PUBLIC_WEB_URL || "http://localhost:5173";
   const detailUrl = `${webUrl.replace(/\/$/, "")}/inquiries/${inquiry.id}`;
-  const fromName = process.env.SMTP_FROM_NAME || "KIPI 컴플라이언스팀";
-  const fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER;
-
   const subjectLabel = { PATENT: "특허", UTILITY: "실용신안", TRADEMARK: "상표" }[inquiry.ip_type] || "지식재산권";
 
-  await t.sendMail({
-    from: `"${fromName}" <${fromEmail}>`,
-    to: inquiry.responded_email,
+  return {
     subject: `[KIPI 컴플라이언스] 문의하신 건(${subjectLabel} 문의 #${inquiry.id})에 대한 답변이 등록되었습니다`,
     text:
       `안녕하세요, KIPI 컴플라이언스팀입니다.\n\n` +
@@ -67,9 +55,73 @@ async function sendInquiryAnsweredMail(inquiry) {
       `<p><strong>[담당자 답변]</strong><br/>${escapeHtml(inquiry.response_comment).replace(/\n/g, "<br/>")}</p>` +
       `<p><a href="${detailUrl}">${detailUrl}</a> 에서 자세한 내용을 확인하실 수 있습니다.</p>` +
       `<p>감사합니다.</p>`,
+  };
+}
+
+/**
+ * Resend(https://resend.com) HTTPS API로 메일을 보낸다. SMTP 포트가 클라우드 호스팅 환경에서
+ * 막히거나 타임아웃되는 경우가 많아, HTTPS(443)로만 통신하는 이 방식이 훨씬 안정적으로 동작한다.
+ * RESEND_API_KEY가 설정되어 있으면 SMTP보다 이 방식을 우선 사용한다.
+ */
+async function sendViaResend(inquiry) {
+  const { subject, text, html } = buildMailContent(inquiry);
+  const fromName = process.env.SMTP_FROM_NAME || "KIPI 컴플라이언스팀";
+  // 도메인을 인증하지 않았다면 RESEND_FROM_EMAIL을 비워두고, resend.dev 기본 발신 주소를 사용한다.
+  const fromEmail = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: `${fromName} <${fromEmail}>`,
+      to: [inquiry.responded_email],
+      subject,
+      text,
+      html,
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    const err = new Error(`Resend API 오류 (HTTP ${res.status}): ${body.slice(0, 300)}`);
+    err.code = `RESEND_HTTP_${res.status}`;
+    throw err;
+  }
+
+  return { sent: true };
+}
+
+async function sendViaSmtp(inquiry) {
+  const t = getTransporter();
+  if (!t) {
+    console.warn(`[mailer] SMTP 미설정으로 메일 발송을 건너뜁니다. (문의 #${inquiry.id} -> ${inquiry.responded_email})`);
+    return { sent: false, reason: "SMTP_NOT_CONFIGURED" };
+  }
+
+  const { subject, text, html } = buildMailContent(inquiry);
+  const fromName = process.env.SMTP_FROM_NAME || "KIPI 컴플라이언스팀";
+  const fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER;
+
+  await t.sendMail({
+    from: `"${fromName}" <${fromEmail}>`,
+    to: inquiry.responded_email,
+    subject,
+    text,
+    html,
   });
 
   return { sent: true };
+}
+
+/** 컴플라이언스 담당자가 답변을 등록하면 문의자에게 안내 메일을 발송한다. */
+async function sendInquiryAnsweredMail(inquiry) {
+  if (process.env.RESEND_API_KEY) {
+    return sendViaResend(inquiry);
+  }
+  return sendViaSmtp(inquiry);
 }
 
 function escapeHtml(str) {

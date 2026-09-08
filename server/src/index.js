@@ -36,6 +36,8 @@ app.get("/api/health", (req, res) => {
     hasKiprisKey: Boolean(process.env.KIPRIS_API_KEY),
     hasCompliancePassword: Boolean(process.env.COMPLIANCE_PASSWORD),
     hasSmtpConfig: Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS),
+    hasResendConfig: Boolean(process.env.RESEND_API_KEY),
+    mailProvider: process.env.RESEND_API_KEY ? "resend" : "smtp",
   });
 });
 

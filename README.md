@@ -98,8 +98,9 @@ cd ../server && npm start   # http://localhost:4000 하나로 API + 화면 모�
    | 변수명 | 설명 |
    |---|---|
    | `KIPRIS_API_KEY` | KIPRIS Plus에서 발급받은 인증키 (필수) |
-   | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS` | 답변 등록 메일 발송용 SMTP 계정 |
-   | `SMTP_FROM_NAME`, `SMTP_FROM_EMAIL` | 발신자 표시 이름/주소 |
+   | `RESEND_API_KEY` | (권장) [Resend](https://resend.com) API 키. 있으면 SMTP 대신 이걸로 메일 발송 — Railway 등에서 SMTP 포트가 막히는 문제를 피할 수 있음. 아래 "메일 발송 설정" 참고 |
+   | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS` | `RESEND_API_KEY`가 없을 때 사용되는 SMTP 계정 |
+   | `SMTP_FROM_NAME`, `SMTP_FROM_EMAIL` | 발신자 표시 이름/주소 (Resend 사용 시에도 발신자 이름에 재사용됨) |
    | `PUBLIC_WEB_URL` | 5단계에서 발급받는 Railway 공개 도메인(예: `https://xxxx.up.railway.app`). 메일 본문 링크에 사용되므로 도메인 확정 후 채워주세요 |
    | `DATA_DIR` | SQLite DB 저장 경로. 6단계에서 만들 Volume의 마운트 경로로 지정 (예: `/data`) |
    | `UPLOAD_DIR` | 첨부파일 저장 경로. 위와 동일한 Volume 하위 경로로 지정 (예: `/data/uploads`) |
@@ -117,6 +118,29 @@ cd ../server && npm start   # http://localhost:4000 하나로 API + 화면 모�
    보이면 정상입니다. 이후 도메인 루트로 접속해 검색/문의 화면이 뜨는지 확인합니다.
 
 이후 GitHub 저장소의 해당 브랜치에 push할 때마다 Railway가 자동으로 재빌드/재배포합니다.
+
+### 메일 발송 설정 (SMTP 대신 Resend 권장)
+
+Railway 같은 클라우드 호스팅에서는 Gmail 등 SMTP 서버로 나가는 587/465 포트가 막히거나
+연결이 타임아웃되는 경우가 흔합니다(실제로 이 프로젝트 배포 중 확인됨). HTTPS(443)로만 통신하는
+[Resend](https://resend.com)를 쓰면 이 문제를 피할 수 있어 권장합니다.
+
+1. https://resend.com 에서 무료 가입 (카드 불필요, 월 3,000통/일 100통 무료).
+2. 대시보드 → API Keys → 새 키 발급.
+3. Railway Variables에 `RESEND_API_KEY`로 등록 — 이것만 설정하면 SMTP 관련 변수는 없어도 됩니다.
+4. 발신 주소:
+   - 별도 도메인 인증 없이 바로 쓰려면 `RESEND_FROM_EMAIL`을 비워두세요 → 자동으로
+     `onboarding@resend.dev` 발신 주소를 사용합니다 (즉시 사용 가능, 발신자 표시가 일반적).
+   - 회사가 소유한 도메인이 있다면 Resend 대시보드에서 그 도메인을 인증(DNS 레코드 추가)한 뒤
+     `RESEND_FROM_EMAIL=noreply@yourcompany.com`처럼 지정하면 해당 주소로 발송됩니다.
+   - **Gmail(`@gmail.com`) 등 본인이 도메인을 소유하지 않은 주소는 어떤 메일 발송 서비스를 써도
+     발신 주소로 쓸 수 없습니다** (도메인 소유권 인증이 불가능하기 때문 — Resend만의 제약이
+     아니라 이메일 인증 구조 자체의 제약입니다). 받는 사람 메일함은 Gmail/회사메일 무엇이든 상관없습니다.
+5. `RESEND_API_KEY`가 설정되어 있으면 자동으로 SMTP보다 우선 사용됩니다(`server/src/mailer.js`).
+   `https://<도메인>/api/health`의 `mailProvider` 값으로 현재 어떤 방식이 활성화되어 있는지
+   확인할 수 있습니다.
+
+SMTP를 계속 쓰고 싶다면 `RESEND_API_KEY`를 비워두고 기존 `SMTP_*` 변수만 설정하면 됩니다.
 
 ## KIPRIS API 연동 관련 참고사항
 
@@ -148,9 +172,13 @@ KIPRIS는 이 4가지(상표는 3가지)를 서로 다른 오퍼레이션으로 
   (`10`=파라미터 오류, `20`=결과없음(정상 처리), `30`=키 미등록, `31`=서비스 이용기간 만료 등). 서버
   로그(Railway → Deployments → Logs)에는 `[kipris] API 오류 응답` 라인에 원본 응답과 요청 URL(키
   마스킹)이 함께 남습니다.
-- **상표 검색 API는 실제로 활용신청/승인이 안 된 키에서 유독 오류가 잦다는 사례가 많습니다.**
-  파라미터를 다 맞춰도 계속 실패한다면, KIPRIS Plus 포털(https://plus.kipris.or.kr) 마이페이지에서
-  "상표정보검색서비스"가 정상적으로 활용신청·승인되어 있는지 먼저 확인해 주세요.
+- **(실사용 확인됨) 상표 검색이 파라미터를 다 맞춰도 계속 `[10] INVALID_REQUEST_PARAMETER_ERROR`로
+  실패한다면, KIPRIS Plus에서 국내 "상표 정보검색" 상품 자체를 구매/신청하지 않았을 가능성이
+  가장 큽니다.** KIPRIS Plus는 API 키 발급과 별개로, 사용하려는 데이터 상품을 개별적으로
+  구매/신청해야 합니다. "법적 상태 이력"이나 "해외상표", "상표 원산지 명칭" 같은 상표 관련 상품을
+  구매했더라도 이는 국내 상표 기본 서지정보/검색과는 다른 상품이라 이 문제를 해결하지 못합니다.
+  KIPRIS Plus 마이페이지의 이용상품 목록에 국내 "상표 정보검색서비스"(또는 유사한 이름)가 있는지
+  확인하고, 없다면 별도로 구매/신청해야 합니다.
 
 ## 보안/운영 참고사항
 

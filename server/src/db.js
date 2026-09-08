@@ -38,6 +38,17 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
+  -- 문의 1건에 여러 개의 출원/등록/공고번호를 연결할 수 있도록 별도 테이블로 관리한다.
+  -- (inquiries.ip_number 는 하위 호환을 위해 콤마로 합친 요약 문자열만 유지)
+  CREATE TABLE IF NOT EXISTS inquiry_ip_numbers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    inquiry_id INTEGER NOT NULL REFERENCES inquiries(id) ON DELETE CASCADE,
+    ip_number TEXT NOT NULL,
+    ip_title TEXT,
+    ip_snapshot TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
   -- 문의자가 브라우저 알림(Web Push)을 허용하면 저장되는 구독 정보.
   -- 이메일이 회사 보안정책 등으로 막히는 경우를 대비한 대체/보조 알림 채널.
   CREATE TABLE IF NOT EXISTS push_subscriptions (

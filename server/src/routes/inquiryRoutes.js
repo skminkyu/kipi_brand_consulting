@@ -29,13 +29,37 @@ function getAttachmentsForInquiry(inquiryId) {
     .all(inquiryId);
 }
 
+function getIpNumbersForInquiry(inquiryId) {
+  return db
+    .prepare("SELECT id, inquiry_id, ip_number, ip_title, ip_snapshot, created_at FROM inquiry_ip_numbers WHERE inquiry_id = ? ORDER BY id")
+    .all(inquiryId)
+    .map((row) => ({ ...row, ip_snapshot: row.ip_snapshot ? JSON.parse(row.ip_snapshot) : null }));
+}
+
+/** 폼에서 온 ipNumbers(JSON 배열 문자열) 또는 구버전 ipNumber(단일 문자열)를 정규화한다. */
+function parseIpNumbers(body) {
+  let numbers = [];
+  if (body.ipNumbers) {
+    try {
+      numbers = JSON.parse(body.ipNumbers);
+    } catch {
+      numbers = [body.ipNumbers];
+    }
+  } else if (body.ipNumber) {
+    numbers = [body.ipNumber];
+  }
+  if (!Array.isArray(numbers)) numbers = [numbers];
+  return [...new Set(numbers.map((n) => String(n || "").trim()).filter(Boolean))];
+}
+
 /**
  * POST /api/inquiries
  * 컴플라이언스 문의 등록. multipart/form-data (파일 첨부 지원).
- * 필드: ipType, ipNumber(선택), requesterName(선택), requesterEmail, subject, comment
+ * 필드: ipType, ipNumbers(선택, JSON 배열 문자열 - 여러 개의 출원/등록/공고번호 연결 가능),
+ *       requesterName(선택), requesterEmail, subject, comment
  */
 router.post("/", upload.array("attachments", 5), async (req, res) => {
-  const { ipType, ipNumber, requesterName, requesterEmail, subject, comment } = req.body;
+  const { ipType, requesterName, requesterEmail, subject, comment } = req.body;
 
   if (!ipType || !IP_TYPES.includes(ipType)) {
     return res.status(400).json({ error: "ipType 은 PATENT, UTILITY, TRADEMARK 중 하나여야 합니다." });
@@ -47,18 +71,21 @@ router.post("/", upload.array("attachments", 5), async (req, res) => {
     return res.status(400).json({ error: "제목과 문의 내용을 입력해 주세요." });
   }
 
-  // 번호가 입력된 경우 KIPRIS API 조회 결과를 스냅샷으로 함께 저장한다.
-  let snapshot = null;
-  if (ipNumber) {
-    try {
-      snapshot =
-        ipType === "TRADEMARK"
-          ? await trademarkService.getDetail(ipNumber)
-          : await patentService.getDetail(ipNumber);
-    } catch (err) {
-      console.warn(`[inquiry] KIPRIS 스냅샷 조회 실패 (ipType=${ipType}, ipNumber=${ipNumber}):`, err.message);
-    }
-  }
+  const ipNumbers = parseIpNumbers(req.body);
+
+  // 번호가 입력된 경우 KIPRIS API 조회 결과를 번호별로 스냅샷 저장한다.
+  const snapshots = await Promise.all(
+    ipNumbers.map(async (number) => {
+      try {
+        const snapshot =
+          ipType === "TRADEMARK" ? await trademarkService.getDetail(number) : await patentService.getDetail(number);
+        return { number, snapshot };
+      } catch (err) {
+        console.warn(`[inquiry] KIPRIS 스냅샷 조회 실패 (ipType=${ipType}, ipNumber=${number}):`, err.message);
+        return { number, snapshot: null };
+      }
+    })
+  );
 
   const insert = db.prepare(`
     INSERT INTO inquiries (ip_type, ip_number, ip_title, ip_snapshot, requester_name, requester_email, subject, comment)
@@ -66,9 +93,10 @@ router.post("/", upload.array("attachments", 5), async (req, res) => {
   `);
   const result = insert.run({
     ip_type: ipType,
-    ip_number: ipNumber || null,
-    ip_title: snapshot?.title || snapshot?.titleKor || null,
-    ip_snapshot: snapshot ? JSON.stringify(snapshot) : null,
+    // 하위 호환(목록 화면 등)을 위해 번호들을 콤마로 합친 요약 문자열만 유지한다.
+    ip_number: ipNumbers.length > 0 ? ipNumbers.join(", ") : null,
+    ip_title: snapshots[0]?.snapshot?.title || snapshots[0]?.snapshot?.titleKor || null,
+    ip_snapshot: null,
     requester_name: requesterName || null,
     requester_email: requesterEmail,
     subject,
@@ -76,6 +104,21 @@ router.post("/", upload.array("attachments", 5), async (req, res) => {
   });
 
   const inquiryId = result.lastInsertRowid;
+
+  if (snapshots.length > 0) {
+    const insertNumber = db.prepare(`
+      INSERT INTO inquiry_ip_numbers (inquiry_id, ip_number, ip_title, ip_snapshot)
+      VALUES (@inquiry_id, @ip_number, @ip_title, @ip_snapshot)
+    `);
+    for (const { number, snapshot } of snapshots) {
+      insertNumber.run({
+        inquiry_id: inquiryId,
+        ip_number: number,
+        ip_title: snapshot?.title || snapshot?.titleKor || null,
+        ip_snapshot: snapshot ? JSON.stringify(snapshot) : null,
+      });
+    }
+  }
 
   const files = req.files || [];
   if (files.length > 0) {
@@ -95,7 +138,11 @@ router.post("/", upload.array("attachments", 5), async (req, res) => {
   }
 
   const row = db.prepare("SELECT * FROM inquiries WHERE id = ?").get(inquiryId);
-  res.status(201).json({ ...inquiryRowToJson(row), attachments: getAttachmentsForInquiry(inquiryId) });
+  res.status(201).json({
+    ...inquiryRowToJson(row),
+    attachments: getAttachmentsForInquiry(inquiryId),
+    ip_numbers: getIpNumbersForInquiry(inquiryId),
+  });
 });
 
 /**
@@ -113,11 +160,15 @@ router.get("/", (req, res) => {
   res.json(rows.map(inquiryRowToJson));
 });
 
-/** GET /api/inquiries/:id - 문의 상세 (첨부파일 목록 포함) */
+/** GET /api/inquiries/:id - 문의 상세 (첨부파일, 연결된 IP 번호 목록 포함) */
 router.get("/:id", (req, res) => {
   const row = db.prepare("SELECT * FROM inquiries WHERE id = ?").get(req.params.id);
   if (!row) return res.status(404).json({ error: "문의 내역을 찾을 수 없습니다." });
-  res.json({ ...inquiryRowToJson(row), attachments: getAttachmentsForInquiry(row.id) });
+  res.json({
+    ...inquiryRowToJson(row),
+    attachments: getAttachmentsForInquiry(row.id),
+    ip_numbers: getIpNumbersForInquiry(row.id),
+  });
 });
 
 /** GET /api/inquiries/:id/attachments/:attachmentId - 첨부파일 다운로드 */
@@ -203,6 +254,7 @@ router.patch("/:id/response", complianceBasicAuth, async (req, res) => {
   res.json({
     ...inquiryRowToJson(updated),
     attachments: getAttachmentsForInquiry(updated.id),
+    ip_numbers: getIpNumbersForInquiry(updated.id),
     mail: mailResult,
     push: pushResult,
   });

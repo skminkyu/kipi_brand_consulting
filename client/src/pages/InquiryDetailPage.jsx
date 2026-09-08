@@ -75,7 +75,6 @@ export default function InquiryDetailPage() {
       <div className="card">
         <div className="detail-grid">
           <Field label="구분" value={IP_TYPE_LABEL[inquiry.ip_type]} />
-          <Field label="관련 IP 번호" value={inquiry.ip_number} />
           <Field label="상태" value={inquiry.status === "ANSWERED" ? "답변완료" : "대기중"} />
           <Field label="문의자" value={inquiry.requester_name} />
           <Field label="문의자 이메일" value={inquiry.requester_email} />
@@ -88,13 +87,19 @@ export default function InquiryDetailPage() {
         <div className="section-title">문의 내용</div>
         <p style={{ whiteSpace: "pre-wrap" }}>{inquiry.comment}</p>
 
-        {inquiry.ip_snapshot && (
+        {inquiry.ip_numbers?.length > 0 && (
           <>
-            <div className="section-title">문의 시점 KIPRIS 조회 정보</div>
-            <p className="meta-line">
-              {inquiry.ip_snapshot.title || inquiry.ip_snapshot.titleKor || "(명칭 없음)"} / 출원번호{" "}
-              {inquiry.ip_snapshot.applicationNumber}
-            </p>
+            <div className="section-title">관련 번호 ({inquiry.ip_numbers.length}건)</div>
+            <ul style={{ paddingLeft: 20, margin: 0 }}>
+              {inquiry.ip_numbers.map((entry) => (
+                <li key={entry.id} className="meta-line">
+                  {entry.ip_number}
+                  {entry.ip_snapshot && (
+                    <> — {entry.ip_snapshot.title || entry.ip_snapshot.titleKor || "(명칭 없음)"}</>
+                  )}
+                </li>
+              ))}
+            </ul>
           </>
         )}
 

@@ -134,7 +134,6 @@ function ComplianceInquiryDetail({ id }) {
       <div className="card">
         <div className="detail-grid">
           <Field label="구분" value={IP_TYPE_LABEL[inquiry.ip_type]} />
-          <Field label="관련 IP 번호" value={inquiry.ip_number} />
           <Field label="문의자" value={inquiry.requester_name} />
           <Field label="문의자 이메일(원본)" value={inquiry.requester_email} />
           <Field label="등록일" value={inquiry.created_at} />
@@ -143,6 +142,22 @@ function ComplianceInquiryDetail({ id }) {
         <p>{inquiry.subject}</p>
         <div className="section-title">문의 내용</div>
         <p style={{ whiteSpace: "pre-wrap" }}>{inquiry.comment}</p>
+
+        {inquiry.ip_numbers?.length > 0 && (
+          <>
+            <div className="section-title">관련 번호 ({inquiry.ip_numbers.length}건)</div>
+            <ul style={{ paddingLeft: 20, margin: 0 }}>
+              {inquiry.ip_numbers.map((entry) => (
+                <li key={entry.id} className="meta-line">
+                  {entry.ip_number}
+                  {entry.ip_snapshot && (
+                    <> — {entry.ip_snapshot.title || entry.ip_snapshot.titleKor || "(명칭 없음)"}</>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
 
         {inquiry.attachments?.length > 0 && (
           <>

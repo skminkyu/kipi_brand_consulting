@@ -94,6 +94,51 @@ async function sendViaResend(inquiry) {
   return { sent: true };
 }
 
+/**
+ * SendGrid(https://sendgrid.com) HTTPS API로 메일을 보낸다. Resend와 달리 도메인 전체를
+ * 인증하지 않아도 "Single Sender Verification"(발신 이메일 주소 1개만 인증)으로 임의의
+ * 수신자에게 발송할 수 있어, 회사/개인 도메인이 없을 때 대안으로 쓸 수 있다.
+ * SENDGRID_API_KEY가 설정되어 있으면 Resend/SMTP보다 이 방식을 우선 사용한다.
+ */
+async function sendViaSendGrid(inquiry) {
+  const { subject, text, html } = buildMailContent(inquiry);
+  const fromName = process.env.SMTP_FROM_NAME || "KIPI 컴플라이언스팀";
+  const fromEmail = process.env.SENDGRID_FROM_EMAIL;
+
+  if (!fromEmail) {
+    throw new Error(
+      "SENDGRID_FROM_EMAIL이 설정되지 않았습니다. SendGrid에서 Single Sender Verification으로 인증한 " +
+        "이메일 주소를 지정해야 합니다."
+    );
+  }
+
+  const res = await fetch("https://api.sendgrid.com/v3/mail/send", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.SENDGRID_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      personalizations: [{ to: [{ email: inquiry.responded_email }] }],
+      from: { email: fromEmail, name: fromName },
+      subject,
+      content: [
+        { type: "text/plain", value: text },
+        { type: "text/html", value: html },
+      ],
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    const err = new Error(`SendGrid API 오류 (HTTP ${res.status}): ${body.slice(0, 300)}`);
+    err.code = `SENDGRID_HTTP_${res.status}`;
+    throw err;
+  }
+
+  return { sent: true };
+}
+
 async function sendViaSmtp(inquiry) {
   const t = getTransporter();
   if (!t) {
@@ -118,6 +163,9 @@ async function sendViaSmtp(inquiry) {
 
 /** 컴플라이언스 담당자가 답변을 등록하면 문의자에게 안내 메일을 발송한다. */
 async function sendInquiryAnsweredMail(inquiry) {
+  if (process.env.SENDGRID_API_KEY) {
+    return sendViaSendGrid(inquiry);
+  }
   if (process.env.RESEND_API_KEY) {
     return sendViaResend(inquiry);
   }

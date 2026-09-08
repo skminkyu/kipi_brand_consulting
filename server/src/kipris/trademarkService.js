@@ -128,26 +128,37 @@ async function callNumberSearchOperation({ operation, field }, number, docsStart
   }
 }
 
-const LIMITED_INFO_NOTICE =
-  "KIPRIS Plus에 국내 상표 정보검색서비스가 구매되어 있지 않아 상표명·이미지·지정상품 분류는 확인할 수 " +
-  "없습니다. 대신 이용 중인 법적 상태 이력 서비스로 조회한 출원 진행 상태만 표시합니다.";
+// 실사용 확인 결과: "출원"(아직 출원공고 전) 상태의 상표는 KIPRIS가 상세 서지정보를 API로
+// 내려주지 않고, "공고"·"등록" 상태가 되어야 정상 조회된다(특허의 출원공개 전 비공개와 유사한
+// 정책으로 추정). 인접 출원번호로 실제 확인됨 - 하나는 출원 상태(조회 불가), 하나는 공고
+// 상태(정상 조회)였음. 구매 상품 문제가 아니라 이 데이터 자체가 아직 공개되지 않은 것이다.
+const PRE_PUBLICATION_NOTICE =
+  "이 상표는 아직 '출원' 상태로 출원공고 전이라, KIPRIS가 상세 서지정보(상표명·이미지·지정상품 분류)를 " +
+  "공개하지 않습니다. 출원공고 또는 등록 이후 다시 조회하면 확인할 수 있습니다. (아래는 법적 상태 이력만 표시)";
+const GENERIC_LIMITED_NOTICE =
+  "상표명·이미지·지정상품 분류를 조회할 수 없어, 법적 상태 이력만 대신 표시합니다. 출원공고 전 상태이거나 " +
+  "KIPRIS Plus에 국내 상표 정보검색서비스가 구매되어 있지 않은 경우일 수 있습니다.";
 
 /** applicationNumberSearchInfo 등이 전부 실패했을 때, 별도로 이용 중일 수 있는
  * 법적 상태 이력 서비스로 최소한 "이 번호가 존재하는지 + 진행 상태"만이라도 확인한다. */
 async function buildLimitedResultFromLegalStatus(number) {
   const history = await legalStatusService.getHistory(number);
   if (history.length === 0) return null;
+
+  const latestStatus = history[history.length - 1]?.legalStatusName || "";
+  const isPrePublication = latestStatus.includes("출원") && !/공고|등록/.test(latestStatus);
+
   return {
     applicationNumber: history[0].applicationNumber || number,
     titleKor: "(상표명 정보 없음 - 법적 상태 이력만 조회 가능)",
-    applicationStatus: history[history.length - 1]?.legalStatusName,
+    applicationStatus: latestStatus,
     applicants: [],
     agents: [],
     classificationCodes: [],
     designatedGoods: [],
     similarGroupCodes: [],
     limited: true,
-    limitedReason: LIMITED_INFO_NOTICE,
+    limitedReason: isPrePublication ? PRE_PUBLICATION_NOTICE : GENERIC_LIMITED_NOTICE,
     legalStatusHistory: history,
     kiprisViewUrl: `https://doi.kipris.or.kr/doi/searchApplNo.do?applNo=${encodeURIComponent(number)}`,
   };

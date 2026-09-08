@@ -161,7 +161,11 @@ export default function InquiryFormPage() {
           </div>
           <div className="form-group">
             <label htmlFor="requesterEmail">
-              문의자 이메일 주소 <span className="hint">(필수, 답변 알림 발송)</span>
+              문의자 이메일 주소{" "}
+              <span className="hint">
+                (필수, 답변 알림 발송 — 회사 메일(@sk.com 등)은 보안 정책상 알림이 차단될 수 있어
+                개인 이메일 주소를 권장합니다)
+              </span>
             </label>
             <input
               id="requesterEmail"

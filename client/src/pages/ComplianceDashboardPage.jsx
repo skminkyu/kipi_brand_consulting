@@ -170,7 +170,11 @@ function ComplianceInquiryDetail({ id }) {
           </div>
           <div className="form-group">
             <label htmlFor="respondedEmail">
-              문의한 사람의 이메일 주소 <span className="hint">(답변 등록 안내 메일 발송)</span>
+              문의한 사람의 이메일 주소{" "}
+              <span className="hint">
+                (답변 등록 안내 메일 발송 — 회사 보안 정책상 사내 메일(@sk.com 등)로는 전달이 안 될 수
+                있어, 가능하면 개인 이메일 주소를 함께 확인해 주세요)
+              </span>
             </label>
             <input
               id="respondedEmail"

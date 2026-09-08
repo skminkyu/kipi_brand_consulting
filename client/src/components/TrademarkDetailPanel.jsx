@@ -26,6 +26,11 @@ export default function TrademarkDetailPanel({ applicationNumber }) {
 
   return (
     <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+      {detail.limited && (
+        <div className="alert alert-error" style={{ width: "100%" }}>
+          {detail.limitedReason || "일부 정보만 확인 가능합니다."}
+        </div>
+      )}
       <div>
         {detail.markImageUrl ? (
           <img src={detail.markImageUrl} alt="상표 이미지" className="mark-image" />
@@ -76,6 +81,30 @@ export default function TrademarkDetailPanel({ applicationNumber }) {
                 <li key={i}>{g}</li>
               ))}
             </ul>
+          </>
+        )}
+
+        {detail.legalStatusHistory?.length > 0 && (
+          <>
+            <div className="section-title">법적 상태 이력</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>일자</th>
+                  <th>상태</th>
+                  <th>설명</th>
+                </tr>
+              </thead>
+              <tbody>
+                {detail.legalStatusHistory.map((h, i) => (
+                  <tr key={i}>
+                    <td>{h.legalStatusDate || "-"}</td>
+                    <td>{h.legalStatusName || "-"}</td>
+                    <td>{h.legalStatusComment || "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </>
         )}
 

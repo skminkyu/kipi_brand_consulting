@@ -1,5 +1,6 @@
 const { callKipris, toArray } = require("./client");
 const { pick } = require("./fieldPick");
+const legalStatusService = require("./legalStatusService");
 
 const SERVICE = "trademarkInfoSearchService";
 
@@ -127,6 +128,31 @@ async function callNumberSearchOperation({ operation, field }, number, docsStart
   }
 }
 
+const LIMITED_INFO_NOTICE =
+  "KIPRIS Plus에 국내 상표 정보검색서비스가 구매되어 있지 않아 상표명·이미지·지정상품 분류는 확인할 수 " +
+  "없습니다. 대신 이용 중인 법적 상태 이력 서비스로 조회한 출원 진행 상태만 표시합니다.";
+
+/** applicationNumberSearchInfo 등이 전부 실패했을 때, 별도로 이용 중일 수 있는
+ * 법적 상태 이력 서비스로 최소한 "이 번호가 존재하는지 + 진행 상태"만이라도 확인한다. */
+async function buildLimitedResultFromLegalStatus(number) {
+  const history = await legalStatusService.getHistory(number);
+  if (history.length === 0) return null;
+  return {
+    applicationNumber: history[0].applicationNumber || number,
+    titleKor: "(상표명 정보 없음 - 법적 상태 이력만 조회 가능)",
+    applicationStatus: history[history.length - 1]?.legalStatusName,
+    applicants: [],
+    agents: [],
+    classificationCodes: [],
+    designatedGoods: [],
+    similarGroupCodes: [],
+    limited: true,
+    limitedReason: LIMITED_INFO_NOTICE,
+    legalStatusHistory: history,
+    kiprisViewUrl: `https://doi.kipris.or.kr/doi/searchApplNo.do?applNo=${encodeURIComponent(number)}`,
+  };
+}
+
 /** 출원번호/등록번호/공고번호 중 어느 것이든 입력하면 상표를 검색한다. */
 async function searchByNumber(number, { docsStart = 1, docsCount = 10 } = {}) {
   const outcomes = await Promise.all(
@@ -134,6 +160,12 @@ async function searchByNumber(number, { docsStart = 1, docsCount = 10 } = {}) {
   );
 
   if (outcomes.every((o) => o.error)) {
+    try {
+      const limited = await buildLimitedResultFromLegalStatus(number);
+      if (limited) return [limited];
+    } catch (err) {
+      console.warn(`[trademarkService] 법적 상태 이력 대체 조회도 실패 (number=${number}):`, err.message);
+    }
     throw outcomes[0].error;
   }
 
@@ -159,10 +191,20 @@ async function searchByName(word, { numOfRows = 10, pageNo = 1 } = {}) {
 
 /** 출원번호로 상표 상세(이미지, 지정상품 분류 등)를 조회한다. */
 async function getDetail(applicationNumber) {
-  const body = await callKipris(`${SERVICE}/getBibliographyDetailInfoSearch`, { applicationNumber });
-  const items = toArray(body.item ?? body.items?.item);
-  if (items.length === 0) return null;
-  return normalizeDetailItem(items[0]);
+  try {
+    const body = await callKipris(`${SERVICE}/getBibliographyDetailInfoSearch`, { applicationNumber });
+    const items = toArray(body.item ?? body.items?.item);
+    if (items.length === 0) return null;
+    return normalizeDetailItem(items[0]);
+  } catch (err) {
+    try {
+      const limited = await buildLimitedResultFromLegalStatus(applicationNumber);
+      if (limited) return limited;
+    } catch (fallbackErr) {
+      console.warn(`[trademarkService] 법적 상태 이력 대체 조회도 실패 (number=${applicationNumber}):`, fallbackErr.message);
+    }
+    throw err;
+  }
 }
 
 module.exports = { searchByNumber, searchByName, getDetail };

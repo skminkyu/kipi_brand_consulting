@@ -130,16 +130,43 @@ const NUMBER_SEARCH_OPERATIONS = [
   { operation: "publicationNumberSearchInfo", field: "publicationNumber" },
 ];
 
-// 키워드 한 칸에 상표명(국문/영문) 또는 출원인/등록권자(상표권자) 명칭 중 무엇을 입력해도 찾을
-// 수 있도록, 3개 항목별검색 오퍼레이션에 병렬로 조회한 뒤 합친다. applicantNamesearchInfo /
-// regPrivilegeNamesearchInfo 는 KIPRIS 실제 API 경로 표기 그대로이며(대문자 S가 아닌 소문자 s),
-// 오탈자가 아니다 - applicationNumberSearchInfo 등 이미 검증된 항목별검색과 동일한 게이트웨이/
-// 필수 플래그를 사용한다.
-const KEYWORD_SEARCH_OPERATIONS = [
-  { operation: "trademarkNameSearchInfo", field: "trademarkName" },
-  { operation: "applicantNamesearchInfo", field: "applicantName" },
-  { operation: "regPrivilegeNamesearchInfo", field: "regPrivilegeName" },
-];
+/** getWordSearch 응답 - camelCase, 평탄한 구조 (items.item). KIPRIS Plus 상품 상세페이지에서
+ * 직접 확인한 공식 요청 URL 샘플(searchString=롯데&searchRecentYear=0)을 기준으로 작성했다 -
+ * "폐기예정"으로 표시되어 있지만, 항목별검색(등록번호/상표명/출원인명 등)이 전부 미검증 추측이라
+ * 실패했던 것과 달리 이 응답 스키마는 KIPRIS 공식 샘플로 확인된 값이다. */
+function normalizeWordSearchItem(item) {
+  const applicationNumber = pick(item, ["applicationNumber"]);
+  return {
+    applicationNumber,
+    applicationDate: pick(item, ["applicationDate"]),
+    publicationNumber: pick(item, ["publicationNumber"]),
+    publicationDate: pick(item, ["publicationDate"]),
+    registerNumber: pick(item, ["registrationNumber"]),
+    registerDate: pick(item, ["registrationDate"]),
+    titleKor: pick(item, ["title"]),
+    applicationStatus: pick(item, ["applicationStatus"]),
+    applicants: String(pick(item, ["applicantName"]) || "")
+      .split(/[|,]/)
+      .map((s) => s.trim())
+      .filter(Boolean),
+    agents: String(pick(item, ["agentName"]) || "")
+      .split(/[|,]/)
+      .map((s) => s.trim())
+      .filter(Boolean),
+    classificationCodes: String(pick(item, ["classificationCode"]) || "")
+      .split(/[,\s]+/)
+      .filter(Boolean),
+    designatedGoods: [],
+    similarGroupCodes: String(pick(item, ["viennaCode"]) || "")
+      .split(/[,\s]+/)
+      .filter(Boolean),
+    markImageUrl: pick(item, ["bigDrawing", "drawing"]),
+    kiprisViewUrl: applicationNumber
+      ? `https://doi.kipris.or.kr/doi/searchApplNo.do?applNo=${encodeURIComponent(applicationNumber)}`
+      : undefined,
+    raw: item,
+  };
+}
 
 async function callFieldSearchOperation({ operation, field, transform }, rawValue, docsStart, docsCount) {
   const value = transform ? transform(rawValue) : rawValue;
@@ -244,17 +271,17 @@ async function searchByNumber(number, { docsStart = 1, docsCount = 10 } = {}) {
   return dedupeByApplicationNumber(outcomes.flatMap((o) => o.results || []));
 }
 
-/** 상표명(국문/영문) 또는 출원인·등록권자(상표권자) 명칭으로 검색한다. */
-async function searchByKeyword(word, { docsStart = 1, docsCount = 10 } = {}) {
-  const outcomes = await Promise.all(
-    KEYWORD_SEARCH_OPERATIONS.map((op) => callFieldSearchOperation(op, word, docsStart, docsCount))
-  );
-
-  if (outcomes.every((o) => o.error)) {
-    throw outcomes[0].error;
-  }
-
-  return dedupeByApplicationNumber(outcomes.flatMap((o) => o.results || []));
+/** 상표명(국문/영문) 또는 출원인·등록권자(상표권자) 명칭으로 검색한다. KIPRIS Plus 상품 상세
+ * 페이지에서 공식 확인한 getWordSearch(searchString)를 사용한다 - "폐기예정" 표시가 있지만
+ * 현재로선 공식 샘플로 검증된 유일한 상표 키워드 검색 오퍼레이션이다. */
+async function searchByKeyword(word, { searchRecentYear = 0, numOfRows = 10, pageNo = 1 } = {}) {
+  const body = await callKipris(`${SERVICE}/getWordSearch`, {
+    searchString: word,
+    searchRecentYear,
+    numOfRows,
+    pageNo,
+  });
+  return toArray(body.items?.item).map(normalizeWordSearchItem);
 }
 
 /** 출원번호로 상표 상세(이미지, 지정상품 분류 등)를 조회한다. */

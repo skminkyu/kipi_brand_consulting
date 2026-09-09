@@ -8,6 +8,7 @@ import TrademarkDetailPanel from "../components/TrademarkDetailPanel.jsx";
 export default function SearchPage() {
   const [type, setType] = useState("PATENT");
   const [number, setNumber] = useState("");
+  const [keyword, setKeyword] = useState("");
   const [results, setResults] = useState(null);
   const [error, setError] = useState("");
   const [errorDetail, setErrorDetail] = useState(null);
@@ -20,8 +21,10 @@ export default function SearchPage() {
 
   async function handleSearch(e) {
     e.preventDefault();
-    if (!number.trim()) {
-      setError("특허/출원/등록/공고 번호를 입력해 주세요.");
+    const trimmedNumber = number.trim();
+    const trimmedKeyword = keyword.trim();
+    if (!trimmedNumber && !trimmedKeyword) {
+      setError("번호 또는 키워드(상표명·발명 명칭·출원인 등) 중 하나를 입력해 주세요.");
       return;
     }
     setLoading(true);
@@ -30,7 +33,10 @@ export default function SearchPage() {
     setResults(null);
     setOpenApplicationNumber(null);
     try {
-      const data = await kiprisApi.search(type, { number: number.trim() });
+      // 번호를 입력했으면 번호 검색을 우선한다 (더 정확한 단건 조회이기 때문).
+      const data = trimmedNumber
+        ? await kiprisApi.search(type, { number: trimmedNumber })
+        : await kiprisApi.search(type, { keyword: trimmedKeyword });
       setResults(data.results);
     } catch (err) {
       setError(err.message);
@@ -69,6 +75,25 @@ export default function SearchPage() {
               placeholder="예: 1020230012345"
               value={number}
               onChange={(e) => setNumber(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="form-row">
+          <div className="form-group">
+            <label htmlFor="keyword">
+              키워드{" "}
+              <span className="hint">
+                (번호를 모를 때 — 상표명/발명·고안 명칭(국문·영문) 또는 출원인·상표권자 명칭으로 검색.
+                번호를 입력하면 이 항목은 무시됩니다)
+              </span>
+            </label>
+            <input
+              id="keyword"
+              type="text"
+              placeholder="예: Clean wiz, 제이에스스퀘어"
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
             />
           </div>
         </div>

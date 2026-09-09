@@ -35,7 +35,7 @@ router.get("/search", async (req, res) => {
     } else if (type === "TRADEMARK") {
       results = number
         ? await trademarkService.searchByNumber(number)
-        : await trademarkService.searchByName(keyword);
+        : await trademarkService.searchByKeyword(keyword);
     } else {
       return res.status(400).json({ error: "type 은 PATENT, UTILITY, TRADEMARK 중 하나여야 합니다." });
     }

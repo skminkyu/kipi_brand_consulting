@@ -181,6 +181,7 @@ KIPRIS Plus는 서비스(오퍼레이션)마다 게이트웨이 경로와 필수
 | 특허·실용신안 서지상세 (`getBibliographyDetailInfoSearch`) | `/kipo-api/kipi/` | `ServiceKey` | `applicationNumber`만 필요 |
 | 상표 항목별검색 (`applicationNumberSearchInfo`/`registerNumberSearchInfo`/`publicationNumberSearchInfo`) | `/kipo-api/kipi/` | `ServiceKey` | 상태(출원/등록/거절 등)·유형(문자상표/도형상표 등) 플래그 약 30개가 전부 필수값 — 코드에서 전체 포함(`true`)으로 채워서 호출 |
 | 상표 서지상세 (`getBibliographyDetailInfoSearch`) | `/kipo-api/kipi/` | `ServiceKey` | `applicationNumber`만 필요 |
+| 상표 키워드검색 (`trademarkNameSearchInfo`/`applicantNamesearchInfo`/`regPrivilegeNamesearchInfo`) | `/kipo-api/kipi/` | `ServiceKey` | 상표명(국문/영문)·출원인명·등록권자(상표권자)명 중 아무거나 입력해도 찾을 수 있도록 3개 오퍼레이션을 병렬 호출 후 병합. `applicantNamesearchInfo`/`regPrivilegeNamesearchInfo`의 소문자 `s`는 오탈자가 아니라 KIPRIS 실제 API 경로 표기임 |
 
 화면의 "번호" 입력칸 하나에는 출원번호·등록번호·공개번호·공고번호 중 아무거나 입력할 수 있는데,
 KIPRIS는 이 4가지(상표는 3가지)를 서로 다른 오퍼레이션으로 나눠 제공합니다. 그래서
@@ -188,6 +189,14 @@ KIPRIS는 이 4가지(상표는 3가지)를 서로 다른 오퍼레이션으로 
 전체에 병렬로 조회한 뒤 결과를 합쳐서 반환합니다 — 사용자가 어떤 번호를 넣었는지 미리 판별할 필요가
 없습니다. 응답의 `resultCode`가 `20`(결과없음)인 항목은 오류가 아니라 정상적인 "매칭 없음"으로 처리하고,
 4(3)개 오퍼레이션이 전부 진짜 오류일 때만 화면에 오류로 표시합니다.
+
+검색 화면에는 "번호" 입력칸과 별도로 "키워드" 입력칸이 있어, 번호를 모를 때도 검색할 수 있습니다.
+번호를 입력하면 번호 검색이 우선하고, 비어 있으면 키워드로 검색합니다.
+- 특허·실용신안: `freeSearchInfo`(자유검색) 하나로 발명·고안의 명칭, 출원인명 등을 폭넓게 검색합니다.
+- 상표: 상표명(국문/영문, 예: `Clean wiz`)과 출원인·등록권자(상표권자) 명칭(예: `제이에스스퀘어`)을
+  구분 없이 검색할 수 있도록 `trademarkNameSearchInfo`(상표명칭) / `applicantNamesearchInfo`(출원인명) /
+  `regPrivilegeNamesearchInfo`(등록권자명) 3개 오퍼레이션을 병렬 호출한 뒤 병합합니다. 출원 이후
+  권리가 양도되어 출원인과 현재 상표권자가 다른 경우까지 대비해 두 이름 모두로 검색되게 했습니다.
 
 - 이 개발 환경은 보안 정책상 `plus.kipris.or.kr`로의 외부 네트워크 호출이 차단되어 있어, 위 매핑은
   KIPRIS Plus 공식 명세 및 실제 동작이 검증된 공개 구현체를 기준으로 구현하고 모의(mock) 응답으로

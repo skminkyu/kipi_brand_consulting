@@ -5,10 +5,11 @@ const trademarkAdminHistoryService = require("./trademarkAdminHistoryService");
 
 const SERVICE = "trademarkInfoSearchService";
 
-// applicationNumberSearchInfo 명세상 "필수값"으로 명시된 것은 상태 플래그(8개)와
-// 상표 형태 플래그(13개)뿐이다. 상표 종류 플래그(trademark/serviceMark 등 9개)는 각 유형의
-// 내부 코드(-40, -41 등)만 안내되어 있고 필수 표시가 없어, 불필요한 파라미터로 오히려
-// 거절당할 가능성을 줄이기 위해 보내지 않는다(필요 시 REQUIRED_FLAGS에 다시 추가).
+// 상태 플래그(8개)·상표 형태 플래그(13개)에 더해, 상표 "종류" 플래그(trademark/serviceMark 등
+// 9개)도 명세상 항목별검색 전체(등록번호/공고번호/상표명/출원인명/등록권자명 검색 포함)에 필수값으로
+// 표시되어 있다. applicationNumberSearchInfo는 이게 없어도 동작했지만, 실사용 확인 결과 나머지
+// 오퍼레이션(등록번호 등)은 이 9개가 없으면 전부 INVALID_REQUEST_PARAMETER_ERROR로 거절되어
+// 전부 포함(true)하도록 되돌렸다.
 const REQUIRED_FLAGS = {
   application: "true",
   registration: "true",
@@ -31,6 +32,15 @@ const REQUIRED_FLAGS = {
   motion: "true",
   visual: "true",
   invisible: "true",
+  trademark: "true",
+  serviceMark: "true",
+  trademarkServiceMark: "true",
+  businessEmblem: "true",
+  collectiveMark: "true",
+  geoOrgMark: "true",
+  internationalMark: "true",
+  certMark: "true",
+  geoCertMark: "true",
 };
 
 /** applicationNumberSearchInfo 응답 - PascalCase, 평탄한 구조 (items.TradeMarkInfo) */
@@ -104,11 +114,19 @@ function normalizeDetailItem(item) {
   };
 }
 
+// KIPRIS는 등록번호를 "구분(2)+일련번호(7)+갱신차수(4, 최초등록은 0000)" 13자리 정형 포맷으로
+// 요구한다(공보에 표기되는 "40-1529497"은 9자리 표시용 축약형). 9자리로 입력되면 뒤에 0000을
+// 붙여 13자리로 맞춘다 - 이미 13자리(갱신 차수 포함)로 입력된 경우는 그대로 둔다.
+function formatRegisterNumber(raw) {
+  const digits = String(raw || "").replace(/[^0-9]/g, "");
+  return digits.length === 9 ? `${digits}0000` : digits;
+}
+
 // "번호" 한 칸에 출원/등록/공고번호 중 무엇을 넣어도 찾을 수 있도록,
 // 사용자가 입력한 값을 3개 항목별검색 오퍼레이션에 각각 넣어 병렬로 조회한 뒤 합친다.
 const NUMBER_SEARCH_OPERATIONS = [
   { operation: "applicationNumberSearchInfo", field: "applicationNumber" },
-  { operation: "registerNumberSearchInfo", field: "registerNumber" },
+  { operation: "registerNumberSearchInfo", field: "registerNumber", transform: formatRegisterNumber },
   { operation: "publicationNumberSearchInfo", field: "publicationNumber" },
 ];
 
@@ -123,7 +141,8 @@ const KEYWORD_SEARCH_OPERATIONS = [
   { operation: "regPrivilegeNamesearchInfo", field: "regPrivilegeName" },
 ];
 
-async function callFieldSearchOperation({ operation, field }, value, docsStart, docsCount) {
+async function callFieldSearchOperation({ operation, field, transform }, rawValue, docsStart, docsCount) {
+  const value = transform ? transform(rawValue) : rawValue;
   try {
     const body = await callKipris(`${SERVICE}/${operation}`, {
       [field]: value,

@@ -36,11 +36,11 @@ function saveSubscription(inquiryId, subscription) {
 /** 답변이 등록되면, 해당 문의를 구독 중인 모든 브라우저에 알림을 보낸다. */
 async function sendPushForInquiry(inquiry) {
   if (!ensureConfigured()) {
-    return { attempted: 0, sent: 0 };
+    return { attempted: 0, sent: 0, reason: "NOT_CONFIGURED" };
   }
 
   const rows = db.prepare("SELECT * FROM push_subscriptions WHERE inquiry_id = ?").all(inquiry.id);
-  if (rows.length === 0) return { attempted: 0, sent: 0 };
+  if (rows.length === 0) return { attempted: 0, sent: 0, reason: "NO_SUBSCRIBERS" };
 
   const webUrl = process.env.PUBLIC_WEB_URL || "http://localhost:5173";
   const detailUrl = `${webUrl.replace(/\/$/, "")}/inquiries/${inquiry.id}`;

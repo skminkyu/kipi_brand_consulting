@@ -82,6 +82,7 @@ function ComplianceInquiryDetail({ id }) {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [mailNotice, setMailNotice] = useState(null);
+  const [pushNotice, setPushNotice] = useState(null);
 
   function load() {
     inquiryApi.get(id).then((data) => {
@@ -98,6 +99,7 @@ function ComplianceInquiryDetail({ id }) {
     e.preventDefault();
     setSaveError("");
     setMailNotice(null);
+    setPushNotice(null);
 
     if (!respondedEmail.trim()) {
       setSaveError("문의한 사람의 이메일 주소를 입력해 주세요.");
@@ -117,6 +119,7 @@ function ComplianceInquiryDetail({ id }) {
       });
       setInquiry(updated);
       setMailNotice(updated.mail || { sent: false });
+      setPushNotice(updated.push || null);
     } catch (err) {
       setSaveError(err.message);
     } finally {
@@ -243,6 +246,18 @@ function ComplianceInquiryDetail({ id }) {
               </>
             ) : (
               <> 서버의 SMTP 설정을 확인해 주세요.</>
+            )}
+          </div>
+        )}
+
+        {pushNotice && (
+          <div className={pushNotice.sent > 0 ? "alert alert-success" : "alert"} style={{ background: pushNotice.sent > 0 ? undefined : "#f2f4f7" }}>
+            {pushNotice.reason === "NOT_CONFIGURED" ? (
+              <>브라우저 알림: 서버에 VAPID 키(VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY)가 설정되어 있지 않아 발송하지 않았습니다.</>
+            ) : pushNotice.reason === "NO_SUBSCRIBERS" ? (
+              <>브라우저 알림: 이 문의를 구독 중인 브라우저가 없습니다 (문의자가 "브라우저 알림 받기"를 누르지 않았거나 아직 실패한 상태일 수 있습니다).</>
+            ) : (
+              <>브라우저 알림: 구독 {pushNotice.attempted}건 중 {pushNotice.sent}건 발송 성공했습니다.</>
             )}
           </div>
         )}

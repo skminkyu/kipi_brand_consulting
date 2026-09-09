@@ -1,6 +1,7 @@
 const { callKipris, toArray } = require("./client");
 const { pick } = require("./fieldPick");
 const legalStatusService = require("./legalStatusService");
+const trademarkAdminHistoryService = require("./trademarkAdminHistoryService");
 
 const SERVICE = "trademarkInfoSearchService";
 
@@ -139,18 +140,38 @@ const GENERIC_LIMITED_NOTICE =
   "상표명·이미지·지정상품 분류를 조회할 수 없어, 법적 상태 이력만 대신 표시합니다. 출원공고 전 상태이거나 " +
   "KIPRIS Plus에 국내 상표 정보검색서비스가 구매되어 있지 않은 경우일 수 있습니다.";
 
-/** applicationNumberSearchInfo 등이 전부 실패했을 때, 별도로 이용 중일 수 있는
- * 법적 상태 이력 서비스로 최소한 "이 번호가 존재하는지 + 진행 상태"만이라도 확인한다. */
-async function buildLimitedResultFromLegalStatus(number) {
-  const history = await legalStatusService.getHistory(number);
-  if (history.length === 0) return null;
+/** 상표 행정처리 이력(RelatedDocsonfileTMService, KIPRIS Plus 추가 구매 상품)을 best-effort로
+ * 조회한다. 실패해도 다른 정보(서지상세/법적 상태 이력)는 계속 보여줘야 하므로 예외를 삼킨다. */
+async function fetchAdminHistorySafe(applicationNumber) {
+  try {
+    return await trademarkAdminHistoryService.getHistory(applicationNumber);
+  } catch (err) {
+    console.warn(`[trademarkService] 행정처리 이력 조회 실패 (number=${applicationNumber}):`, err.message);
+    return [];
+  }
+}
 
-  const latestStatus = history[history.length - 1]?.legalStatusName || "";
+/** applicationNumberSearchInfo 등이 전부 실패했을 때, 별도로 구매/이용 중일 수 있는
+ * 행정처리 이력·법적 상태 이력 서비스로 최소한 "이 번호가 존재하는지 + 진행 상태"만이라도 확인한다. */
+async function buildLimitedResultFromLegalStatus(number) {
+  const [adminHistory, legalHistory] = await Promise.all([
+    fetchAdminHistorySafe(number),
+    legalStatusService.getHistory(number).catch((err) => {
+      console.warn(`[trademarkService] 법적 상태 이력 조회 실패 (number=${number}):`, err.message);
+      return [];
+    }),
+  ]);
+  if (adminHistory.length === 0 && legalHistory.length === 0) return null;
+
+  const latestStatus =
+    legalHistory[legalHistory.length - 1]?.legalStatusName ||
+    adminHistory[adminHistory.length - 1]?.status ||
+    "";
   const isPrePublication = latestStatus.includes("출원") && !/공고|등록/.test(latestStatus);
 
   return {
-    applicationNumber: history[0].applicationNumber || number,
-    titleKor: "(상표명 정보 없음 - 법적 상태 이력만 조회 가능)",
+    applicationNumber: legalHistory[0]?.applicationNumber || adminHistory[0]?.applicationNumber || number,
+    titleKor: "(상표명 정보 없음 - 행정처리/법적 상태 이력만 조회 가능)",
     applicationStatus: latestStatus,
     applicants: [],
     agents: [],
@@ -159,7 +180,8 @@ async function buildLimitedResultFromLegalStatus(number) {
     similarGroupCodes: [],
     limited: true,
     limitedReason: isPrePublication ? PRE_PUBLICATION_NOTICE : GENERIC_LIMITED_NOTICE,
-    legalStatusHistory: history,
+    legalStatusHistory: legalHistory,
+    adminHistory,
     kiprisViewUrl: `https://doi.kipris.or.kr/doi/searchApplNo.do?applNo=${encodeURIComponent(number)}`,
   };
 }
@@ -206,7 +228,9 @@ async function getDetail(applicationNumber) {
     const body = await callKipris(`${SERVICE}/getBibliographyDetailInfoSearch`, { applicationNumber });
     const items = toArray(body.item ?? body.items?.item);
     if (items.length === 0) return null;
-    return normalizeDetailItem(items[0]);
+    const detail = normalizeDetailItem(items[0]);
+    detail.adminHistory = await fetchAdminHistorySafe(applicationNumber);
+    return detail;
   } catch (err) {
     try {
       const limited = await buildLimitedResultFromLegalStatus(applicationNumber);

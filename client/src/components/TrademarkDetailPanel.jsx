@@ -84,6 +84,32 @@ export default function TrademarkDetailPanel({ applicationNumber }) {
           </>
         )}
 
+        {detail.adminHistory?.length > 0 && (
+          <>
+            <div className="section-title">행정처리 이력 (통합이력정보)</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>일자</th>
+                  <th>서류명</th>
+                  <th>구분</th>
+                  <th>상태</th>
+                </tr>
+              </thead>
+              <tbody>
+                {detail.adminHistory.map((h, i) => (
+                  <tr key={i}>
+                    <td>{h.documentDate || "-"}</td>
+                    <td>{h.documentTitle || "-"}</td>
+                    <td>{h.step || "-"}</td>
+                    <td>{h.status || "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+
         {detail.legalStatusHistory?.length > 0 && (
           <>
             <div className="section-title">법적 상태 이력</div>

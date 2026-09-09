@@ -123,11 +123,16 @@ function formatRegisterNumber(raw) {
 }
 
 // "번호" 한 칸에 출원/등록/공고번호 중 무엇을 넣어도 찾을 수 있도록,
-// 사용자가 입력한 값을 3개 항목별검색 오퍼레이션에 각각 넣어 병렬로 조회한 뒤 합친다.
+// 사용자가 입력한 값을 3개 오퍼레이션에 각각 넣어 병렬로 조회한 뒤 합친다.
+// applicationNumberSearchInfo는 실사용으로 확인된 유일한 항목별검색이라 그대로 둔다(응답이
+// items.TradeMarkInfo PascalCase). registerNumberSearchInfo/publicationNumberSearchInfo는
+// 비공식 문서의 미검증 추측이었고 전부 실패했던 반면, "전체검색"(getAdvancedSearch)은 KIPRIS Plus
+// 상품 페이지 공식 샘플로 확인됐다(응답이 items.item camelCase, 페이징도 pageNo/numOfRows) - 두
+// 필드를 각각 getAdvancedSearch로 단독 조회하도록 바꿨다.
 const NUMBER_SEARCH_OPERATIONS = [
-  { operation: "applicationNumberSearchInfo", field: "applicationNumber" },
-  { operation: "registerNumberSearchInfo", field: "registerNumber", transform: formatRegisterNumber },
-  { operation: "publicationNumberSearchInfo", field: "publicationNumber" },
+  { operation: "applicationNumberSearchInfo", field: "applicationNumber", parse: parseTradeMarkInfoItems, paging: "docs" },
+  { operation: "getAdvancedSearch", field: "registerNumber", transform: formatRegisterNumber, parse: parseFlatItems, paging: "page" },
+  { operation: "getAdvancedSearch", field: "publicationNumber", parse: parseFlatItems, paging: "page" },
 ];
 
 /** getWordSearch 응답 - camelCase, 평탄한 구조 (items.item). KIPRIS Plus 상품 상세페이지에서
@@ -168,20 +173,34 @@ function normalizeWordSearchItem(item) {
   };
 }
 
-async function callFieldSearchOperation({ operation, field, transform }, rawValue, docsStart, docsCount) {
+function parseTradeMarkInfoItems(body) {
+  return toArray(body.items?.TradeMarkInfo).map(normalizeSearchItem);
+}
+
+function parseFlatItems(body) {
+  return toArray(body.items?.item).map(normalizeWordSearchItem);
+}
+
+async function callFieldSearchOperation(
+  { operation, field, transform, parse = parseTradeMarkInfoItems, paging = "docs" },
+  rawValue,
+  pageStart,
+  pageCount
+) {
   const value = transform ? transform(rawValue) : rawValue;
+  const pagingParams =
+    paging === "page" ? { pageNo: pageStart, numOfRows: pageCount } : { docsStart: pageStart, docsCount: pageCount };
   try {
     const body = await callKipris(`${SERVICE}/${operation}`, {
       [field]: value,
-      docsStart,
-      docsCount,
+      ...pagingParams,
       descSort: "false",
       sortSpec: "AD",
       ...REQUIRED_FLAGS,
     });
-    return { results: toArray(body.items?.TradeMarkInfo).map(normalizeSearchItem) };
+    return { results: parse(body) };
   } catch (err) {
-    console.warn(`[trademarkService] ${operation} 조회 실패 (value=${value}):`, err.message);
+    console.warn(`[trademarkService] ${operation} 조회 실패 (field=${field}, value=${value}):`, err.message);
     return { error: err };
   }
 }
